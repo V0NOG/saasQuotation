@@ -1,13 +1,20 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "../../icons";
 import Label from "../form/Label";
 import Input from "../form/input/InputField";
 import Checkbox from "../form/input/Checkbox";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5050";
+
+function startGoogleOAuth() {
+  window.location.href = `${API_BASE}/api/auth/google`;
+}
+
 export default function SignUpForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
+
   return (
     <div className="flex flex-col flex-1 w-full overflow-y-auto lg:w-1/2 no-scrollbar">
       <div className="w-full max-w-md mx-auto mb-5 sm:pt-10">
@@ -19,6 +26,7 @@ export default function SignUpForm() {
           Back to dashboard
         </Link>
       </div>
+
       <div className="flex flex-col justify-center flex-1 w-full max-w-md mx-auto">
         <div>
           <div className="mb-5 sm:mb-8">
@@ -29,9 +37,15 @@ export default function SignUpForm() {
               Enter your email and password to sign up!
             </p>
           </div>
+
           <div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5">
-              <button className="inline-flex items-center justify-center gap-3 py-3 text-sm font-normal text-gray-700 transition-colors bg-gray-100 rounded-lg px-7 hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10">
+              {/* Google button - KEEP same TailAdmin placement */}
+              <button
+                type="button"
+                onClick={startGoogleOAuth}
+                className="inline-flex items-center justify-center gap-3 py-3 text-sm font-normal text-gray-700 transition-colors bg-gray-100 rounded-lg px-7 hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10"
+              >
                 <svg
                   width="20"
                   height="20"
@@ -58,7 +72,12 @@ export default function SignUpForm() {
                 </svg>
                 Sign up with Google
               </button>
-              <button className="inline-flex items-center justify-center gap-3 py-3 text-sm font-normal text-gray-700 transition-colors bg-gray-100 rounded-lg px-7 hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10">
+
+              {/* X button unchanged */}
+              <button
+                type="button"
+                className="inline-flex items-center justify-center gap-3 py-3 text-sm font-normal text-gray-700 transition-colors bg-gray-100 rounded-lg px-7 hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10"
+              >
                 <svg
                   width="21"
                   className="fill-current"
@@ -72,9 +91,10 @@ export default function SignUpForm() {
                 Sign up with X
               </button>
             </div>
+
             <div className="relative py-3 sm:py-5">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200 dark:border-gray-800"></div>
+                <div className="w-full border-t border-gray-200 dark:border-gray-800" />
               </div>
               <div className="relative flex justify-center text-sm">
                 <span className="p-2 text-gray-400 bg-white dark:bg-gray-900 sm:px-5 sm:py-2">
@@ -82,10 +102,10 @@ export default function SignUpForm() {
                 </span>
               </div>
             </div>
+
             <form>
               <div className="space-y-5">
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                  {/* <!-- First Name --> */}
                   <div className="sm:col-span-1">
                     <Label>
                       First Name<span className="text-error-500">*</span>
@@ -97,7 +117,7 @@ export default function SignUpForm() {
                       placeholder="Enter your first name"
                     />
                   </div>
-                  {/* <!-- Last Name --> */}
+
                   <div className="sm:col-span-1">
                     <Label>
                       Last Name<span className="text-error-500">*</span>
@@ -110,7 +130,7 @@ export default function SignUpForm() {
                     />
                   </div>
                 </div>
-                {/* <!-- Email --> */}
+
                 <div>
                   <Label>
                     Email<span className="text-error-500">*</span>
@@ -122,7 +142,7 @@ export default function SignUpForm() {
                     placeholder="Enter your email"
                   />
                 </div>
-                {/* <!-- Password --> */}
+
                 <div>
                   <Label>
                     Password<span className="text-error-500">*</span>
@@ -144,7 +164,7 @@ export default function SignUpForm() {
                     </span>
                   </div>
                 </div>
-                {/* <!-- Checkbox --> */}
+
                 <div className="flex items-center gap-3">
                   <Checkbox
                     className="w-5 h-5"
@@ -162,9 +182,12 @@ export default function SignUpForm() {
                     </span>
                   </p>
                 </div>
-                {/* <!-- Button --> */}
+
                 <div>
-                  <button className="flex items-center justify-center w-full px-4 py-3 text-sm font-medium text-white transition rounded-lg bg-brand-500 shadow-theme-xs hover:bg-brand-600">
+                  <button
+                    type="button"
+                    className="flex items-center justify-center w-full px-4 py-3 text-sm font-medium text-white transition rounded-lg bg-brand-500 shadow-theme-xs hover:bg-brand-600"
+                  >
                     Sign Up
                   </button>
                 </div>
@@ -173,7 +196,7 @@ export default function SignUpForm() {
 
             <div className="mt-5">
               <p className="text-sm font-normal text-center text-gray-700 dark:text-gray-400 sm:text-start">
-                Already have an account? {""}
+                Already have an account?{" "}
                 <Link
                   to="/signin"
                   className="text-brand-500 hover:text-brand-600 dark:text-brand-400"

@@ -1,116 +1,206 @@
+// backend/routes/auth.routes.js
 const express = require("express");
 const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const passport = require("../config/passport");
+const passport = require("passport"); // use global passport (server.js initializes it)
 const Org = require("../models/Org");
 const User = require("../models/User");
-const { signAccessToken, signRefreshToken, setRefreshCookie, clearRefreshCookie } = require("../utils/tokens");
+
+const {
+  signAccessToken,
+  signRefreshToken,
+  verifyRefreshToken,
+  setRefreshCookie,
+  clearRefreshCookie,
+} = require("../utils/tokens");
 
 const router = express.Router();
 
-function buildAccessPayload(user) {
-  return { userId: user._id.toString(), orgId: user.orgId.toString(), role: user.role };
-}
-
+/**
+ * POST /api/auth/register
+ */
 router.post("/register", async (req, res) => {
-  const { orgName, firstName, lastName, email, password } = req.body;
+  try {
+    const { orgName, firstName, lastName, email, password } = req.body;
 
-  if (!orgName || !email || !password) {
-    return res.status(400).json({ message: "orgName, email and password are required" });
+    if (!orgName || !email || !password) {
+      return res
+        .status(400)
+        .json({ message: "orgName, email and password are required" });
+    }
+
+    const emailLower = String(email).toLowerCase().trim();
+
+    // prevent duplicate
+    const exists = await User.findOne({ email: emailLower });
+    if (exists) return res.status(409).json({ message: "Email already in use" });
+
+    const org = await Org.create({ name: orgName });
+
+    const passwordHash = await bcrypt.hash(String(password), 12);
+    const user = await User.create({
+      orgId: org._id,
+      firstName: firstName || "",
+      lastName: lastName || "",
+      email: emailLower,
+      passwordHash,
+      role: "owner",
+    });
+
+    const accessToken = signAccessToken(user);
+    const refreshToken = signRefreshToken(user);
+    setRefreshCookie(res, refreshToken);
+
+    return res.json({
+      accessToken,
+      user: {
+        id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+      },
+      org: {
+        id: org._id,
+        name: org.name,
+        currency: org.currency,
+        taxRate: org.taxRate,
+        branding: org.branding,
+      },
+    });
+  } catch (e) {
+    console.error("register error:", e);
+    return res.status(500).json({ message: "Server error" });
   }
-
-  const org = await Org.create({ name: orgName });
-
-  const passwordHash = await bcrypt.hash(password, 12);
-  const user = await User.create({
-    orgId: org._id,
-    firstName: firstName || "",
-    lastName: lastName || "",
-    email: email.toLowerCase(),
-    passwordHash,
-    role: "owner"
-  });
-
-  const access = signAccessToken(buildAccessPayload(user), process.env.JWT_ACCESS_SECRET, process.env.ACCESS_TOKEN_TTL);
-  const refresh = signRefreshToken(buildAccessPayload(user), process.env.JWT_REFRESH_SECRET, process.env.REFRESH_TOKEN_TTL);
-  setRefreshCookie(res, refresh);
-
-  return res.json({
-    accessToken: access,
-    user: { id: user._id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role },
-    org: { id: org._id, name: org.name, currency: org.currency, taxRate: org.taxRate, branding: org.branding }
-  });
 });
 
+/**
+ * POST /api/auth/login
+ */
 router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-  const user = await User.findOne({ email: (email || "").toLowerCase() });
-  if (!user || !user.passwordHash) return res.status(401).json({ message: "Invalid credentials" });
+    const emailLower = String(email || "").toLowerCase().trim();
+    const user = await User.findOne({ email: emailLower });
 
-  const ok = await bcrypt.compare(password || "", user.passwordHash);
-  if (!ok) return res.status(401).json({ message: "Invalid credentials" });
+    if (!user || !user.passwordHash) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
 
-  const org = await Org.findById(user.orgId);
+    const ok = await bcrypt.compare(String(password || ""), user.passwordHash);
+    if (!ok) return res.status(401).json({ message: "Invalid credentials" });
 
-  const access = signAccessToken(buildAccessPayload(user), process.env.JWT_ACCESS_SECRET, process.env.ACCESS_TOKEN_TTL);
-  const refresh = signRefreshToken(buildAccessPayload(user), process.env.JWT_REFRESH_SECRET, process.env.REFRESH_TOKEN_TTL);
-  setRefreshCookie(res, refresh);
-
-  return res.json({
-    accessToken: access,
-    user: { id: user._id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role },
-    org: { id: org._id, name: org.name, currency: org.currency, taxRate: org.taxRate, branding: org.branding }
-  });
-});
-
-// Google OAuth start
-router.get("/google", passport.authenticate("google", { scope: ["profile", "email"] }));
-
-// Google OAuth callback
-router.get(
-  "/google/callback",
-  passport.authenticate("google", { session: false, failureRedirect: `${process.env.FRONTEND_URL}/signin` }),
-  async (req, res) => {
-    const user = req.user;
     const org = await Org.findById(user.orgId);
 
-    const access = signAccessToken(buildAccessPayload(user), process.env.JWT_ACCESS_SECRET, process.env.ACCESS_TOKEN_TTL);
-    const refresh = signRefreshToken(buildAccessPayload(user), process.env.JWT_REFRESH_SECRET, process.env.REFRESH_TOKEN_TTL);
-    setRefreshCookie(res, refresh);
+    const accessToken = signAccessToken(user);
+    const refreshToken = signRefreshToken(user);
+    setRefreshCookie(res, refreshToken);
 
-    // Redirect back to frontend with access token
-    // (Refresh token stays httpOnly cookie)
-    const redirectUrl = new URL(`${process.env.FRONTEND_URL}/auth/callback`);
-    redirectUrl.searchParams.set("accessToken", access);
+    return res.json({
+      accessToken,
+      user: {
+        id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+      },
+      org: org
+        ? {
+            id: org._id,
+            name: org.name,
+            currency: org.currency,
+            taxRate: org.taxRate,
+            branding: org.branding,
+          }
+        : null,
+    });
+  } catch (e) {
+    console.error("login error:", e);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
 
-    res.redirect(redirectUrl.toString());
+/**
+ * GET /api/auth/google
+ * Start Google OAuth
+ */
+router.get(
+  "/google",
+  passport.authenticate("google", {
+    scope: ["profile", "email"],
+    session: false,
+  })
+);
+
+/**
+ * GET /api/auth/google/callback
+ * Google OAuth callback
+ */
+router.get(
+  "/google/callback",
+  passport.authenticate("google", {
+    session: false,
+    failureRedirect: `${process.env.FRONTEND_URL}/signin`,
+  }),
+  async (req, res) => {
+    try {
+      const user = req.user;
+
+      const accessToken = signAccessToken(user);
+      const refreshToken = signRefreshToken(user);
+      setRefreshCookie(res, refreshToken);
+
+      // Redirect back to frontend with access token in query string
+      // (refresh token stays in httpOnly cookie)
+      const redirectUrl = new URL(`${process.env.FRONTEND_URL}/auth/callback`);
+      redirectUrl.searchParams.set("accessToken", accessToken);
+
+      return res.redirect(302, redirectUrl.toString());
+    } catch (e) {
+      console.error("google callback error:", e);
+      return res.redirect(`${process.env.FRONTEND_URL}/signin`);
+    }
   }
 );
 
-// Refresh: uses httpOnly cookie
+/**
+ * POST /api/auth/refresh
+ * Uses httpOnly refresh cookie to mint a new access token
+ */
 router.post("/refresh", async (req, res) => {
-  const token = req.cookies.refreshToken;
-  if (!token) return res.status(401).json({ message: "Missing refresh token" });
-
   try {
-    const payload = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+    const token = req.cookies?.refreshToken;
+    if (!token) return res.status(401).json({ message: "Missing refresh token" });
 
-    const access = signAccessToken(
-      { userId: payload.userId, orgId: payload.orgId, role: payload.role },
-      process.env.JWT_ACCESS_SECRET,
-      process.env.ACCESS_TOKEN_TTL
-    );
+    const payload = verifyRefreshToken(token);
+    if (payload.type !== "refresh") {
+      return res.status(401).json({ message: "Invalid refresh token" });
+    }
 
-    return res.json({ accessToken: access });
-  } catch {
+    // Re-load user so role/orgId are guaranteed current
+    const user = await User.findById(payload.sub).select("_id orgId role");
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    const accessToken = signAccessToken(user);
+
+    // Optional: rotate refresh token each time (recommended)
+    const newRefreshToken = signRefreshToken(user);
+    setRefreshCookie(res, newRefreshToken);
+
+    return res.json({ accessToken });
+  } catch (e) {
     return res.status(401).json({ message: "Invalid refresh token" });
   }
 });
 
+/**
+ * POST /api/auth/logout
+ * Clears refresh cookie
+ */
 router.post("/logout", (req, res) => {
   clearRefreshCookie(res);
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 module.exports = router;

@@ -3,12 +3,6 @@ import AuthLayout from "./AuthPageLayout";
 import SignInForm from "../../components/auth/SignInForm";
 
 export default function SignIn() {
-
-  const googleLogin = () => {
-    window.location.href = `${import.meta.env.VITE_API_BASE_URL}/api/auth/google`;
-  };
-
-
   return ( 
     <>
       <PageMeta
@@ -18,13 +12,6 @@ export default function SignIn() {
       <AuthLayout>
         <SignInForm />
       </AuthLayout>
-      <button
-        type="button"
-        onClick={googleLogin}
-        className="flex w-full items-center justify-center gap-2 rounded-lg border border-stroke bg-white px-4 py-3 text-sm font-medium text-black hover:bg-gray-1 dark:border-strokedark dark:bg-boxdark dark:text-white dark:hover:bg-meta-4"
-      >
-        Continue with Google
-      </button>
     </>
   );
 }

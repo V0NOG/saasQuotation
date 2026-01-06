@@ -1,14 +1,9 @@
 const jwt = require("jsonwebtoken");
 
-function getUserId(user) {
-  return user?._id || user?.id; // supports mongoose doc + plain object
-}
-
 function signAccessToken(user) {
-  const uid = getUserId(user);
   return jwt.sign(
     {
-      sub: String(uid),
+      sub: String(user._id),
       orgId: String(user.orgId),
       role: user.role,
     },
@@ -18,10 +13,9 @@ function signAccessToken(user) {
 }
 
 function signRefreshToken(user) {
-  const uid = getUserId(user);
   return jwt.sign(
     {
-      sub: String(uid),
+      sub: String(user._id),
       orgId: String(user.orgId),
       type: "refresh",
     },
@@ -30,20 +24,42 @@ function signRefreshToken(user) {
   );
 }
 
-function setRefreshCookie(res, refreshToken) {
+function refreshCookieOptions() {
   const isProd = process.env.NODE_ENV === "production";
-
-  res.cookie("refreshToken", refreshToken, {
+  return {
     httpOnly: true,
-    secure: isProd,
-    sameSite: "lax",
-    path: "/api/auth",
-    maxAge: 30 * 24 * 60 * 60 * 1000,
+    secure: isProd,       // localhost dev = false
+    sameSite: "lax",      // works with OAuth redirects on localhost
+    path: "/api/auth",    // cookie only sent to auth routes
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30d
+  };
+}
+
+function setRefreshCookie(res, refreshToken) {
+  res.cookie("refreshToken", refreshToken, refreshCookieOptions());
+}
+
+function clearRefreshCookie(res) {
+  res.clearCookie("refreshToken", {
+    ...refreshCookieOptions(),
+    maxAge: 0,
   });
+}
+
+function verifyAccessToken(token) {
+  return jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+}
+
+function verifyRefreshToken(token) {
+  return jwt.verify(token, process.env.JWT_REFRESH_SECRET);
 }
 
 module.exports = {
   signAccessToken,
   signRefreshToken,
+  verifyAccessToken,
+  verifyRefreshToken,
+  refreshCookieOptions,
   setRefreshCookie,
+  clearRefreshCookie,
 };

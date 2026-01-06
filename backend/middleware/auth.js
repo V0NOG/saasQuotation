@@ -1,17 +1,26 @@
-const jwt = require("jsonwebtoken");
+const { verifyAccessToken } = require("../utils/tokens");
 
 function requireAuth(req, res, next) {
-  const auth = req.headers.authorization || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-
-  if (!token) return res.status(401).json({ message: "Missing access token" });
-
   try {
-    const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-    req.user = payload; // { userId, orgId, role }
-    next();
-  } catch {
-    return res.status(401).json({ message: "Invalid or expired token" });
+    const header = req.headers.authorization || "";
+    const [type, token] = header.split(" ");
+
+    if (type !== "Bearer" || !token) {
+      return res.status(401).json({ message: "Missing or invalid Authorization header" });
+    }
+
+    const payload = verifyAccessToken(token);
+
+    // Attach user-ish info for downstream use
+    req.user = {
+      id: payload.sub,
+      orgId: payload.orgId,
+      role: payload.role,
+    };
+
+    return next();
+  } catch (e) {
+    return res.status(401).json({ message: "Invalid or expired access token" });
   }
 }
 
