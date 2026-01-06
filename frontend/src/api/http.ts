@@ -1,3 +1,4 @@
+// src/api/http.ts
 import axios from "axios";
 
 export const http = axios.create({
@@ -5,12 +6,26 @@ export const http = axios.create({
   withCredentials: true, // important for refresh cookie
 });
 
-let accessToken: string | null = localStorage.getItem("accessToken");
+const TOKEN_KEY = "userToken"; // ✅ unify (OAuthCallBack uses this)
+
+let accessToken: string | null = localStorage.getItem(TOKEN_KEY);
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
-  if (token) localStorage.setItem("accessToken", token);
-  else localStorage.removeItem("accessToken");
+
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+
+  // ✅ let UI know auth changed
+  window.dispatchEvent(new Event("auth:changed"));
+}
+
+export function getAccessToken() {
+  return accessToken;
+}
+
+export function isLoggedIn() {
+  return !!accessToken;
 }
 
 http.interceptors.request.use((config) => {
@@ -21,18 +36,36 @@ http.interceptors.request.use((config) => {
   return config;
 });
 
+let refreshing: Promise<string | null> | null = null;
+
 http.interceptors.response.use(
   (r) => r,
   async (err) => {
     const original = err.config;
 
-    // if access expired, try refresh once
-    if (err.response?.status === 401 && !original._retry) {
+    if (err.response?.status === 401 && !original?._retry) {
       original._retry = true;
+
       try {
-        const res = await http.post("/auth/refresh");
-        const newToken = res.data.accessToken as string;
+        if (!refreshing) {
+          refreshing = http
+            .post("/auth/refresh")
+            .then((res) => (res.data.accessToken as string) || null)
+            .catch(() => null)
+            .finally(() => {
+              refreshing = null;
+            });
+        }
+
+        const newToken = await refreshing;
+
+        if (!newToken) {
+          setAccessToken(null);
+          return Promise.reject(err);
+        }
+
         setAccessToken(newToken);
+        original.headers = original.headers ?? {};
         original.headers.Authorization = `Bearer ${newToken}`;
         return http(original);
       } catch {

@@ -1,42 +1,42 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import PageMeta from "../../components/common/PageMeta";
+import { setAccessToken } from "../../api/http";
 
-const OAuthCallBack = () => {
+export default function OAuthCallBack() {
   const navigate = useNavigate();
-  const [message, setMessage] = useState("Signing you in...");
+  const [message, setMessage] = useState("Completing sign-in...");
 
   useEffect(() => {
-    // Support BOTH:
-    // 1) /auth/callback?accessToken=...
-    // 2) /auth/callback#access=...
-    const query = new URLSearchParams(window.location.search);
-    const accessTokenFromQuery = query.get("accessToken");
+    const params = new URLSearchParams(window.location.search);
 
-    const hash = window.location.hash || "";
-    const hashParams = new URLSearchParams(hash.replace(/^#/, ""));
-    const accessTokenFromHash = hashParams.get("access");
+    // rename to avoid redeclare collisions
+    const tokenFromUrl = params.get("accessToken");
+    const error = params.get("error");
 
-    const accessToken = accessTokenFromQuery || accessTokenFromHash;
+    if (error) {
+      setMessage(`Login failed: ${error}`);
+      return;
+    }
 
-    if (!accessToken) {
+    if (!tokenFromUrl) {
       setMessage("Login failed. No access token received.");
       return;
     }
 
-    localStorage.setItem("userToken", accessToken);
-    window.dispatchEvent(new Event("userLogin"));
-
-    // Clean URL
-    window.history.replaceState({}, document.title, "/auth/callback");
-
+    setAccessToken(tokenFromUrl);
+    setMessage("Signed in! Redirecting...");
     navigate("/", { replace: true });
   }, [navigate]);
 
   return (
-    <div className="flex h-screen items-center justify-center">
-      <p className="text-lg">{message}</p>
-    </div>
+    <>
+      <PageMeta title="OAuth Callback" description="Completing OAuth sign-in" />
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="rounded-2xl border border-gray-200 p-6 dark:border-gray-800">
+          <p className="text-sm text-gray-700 dark:text-gray-300">{message}</p>
+        </div>
+      </div>
+    </>
   );
-};
-
-export default OAuthCallBack;
+}
