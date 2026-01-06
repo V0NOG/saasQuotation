@@ -2,11 +2,19 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { Dropdown } from "../ui/dropdown/Dropdown";
-import { setAccessToken } from "../../api/http";
+import { useAuth } from "../../context/AuthContext";
+
+function getInitials(nameOrEmail?: string) {
+  if (!nameOrEmail) return "?";
+  const parts = nameOrEmail.trim().split(" ");
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return nameOrEmail.slice(0, 2).toUpperCase();
+}
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   function toggleDropdown() {
     setIsOpen((v) => !v);
@@ -17,14 +25,18 @@ export default function UserDropdown() {
   }
 
   function handleLogout() {
-    // ✅ clears localStorage "userToken" and in-memory token
-    setAccessToken(null);
-
+    logout();
     closeDropdown();
-
-    // redirect to sign-in and prevent back-navigation
     navigate("/signin", { replace: true });
   }
+
+  const displayName =
+    user?.name ||
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+    user?.email ||
+    "Account";
+
+  const initials = getInitials(displayName || user?.email);
 
   return (
     <div className="relative">
@@ -33,11 +45,12 @@ export default function UserDropdown() {
         className="flex items-center text-gray-700 dropdown-toggle dark:text-gray-400"
         type="button"
       >
-        <span className="mr-3 overflow-hidden rounded-full h-11 w-11">
-          <img src="/images/user/owner.png" alt="User" />
+        {/* ✅ no image - initials avatar */}
+        <span className="mr-3 flex h-11 w-11 items-center justify-center rounded-full bg-gray-200 text-sm font-semibold text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+          {initials}
         </span>
 
-        <span className="block mr-1 font-medium text-theme-sm">Musharof</span>
+        <span className="block mr-1 font-medium text-theme-sm">{displayName}</span>
 
         <svg
           className={`stroke-gray-500 dark:stroke-gray-400 transition-transform duration-200 ${
@@ -65,10 +78,10 @@ export default function UserDropdown() {
       >
         <div>
           <span className="block font-medium text-gray-700 text-theme-sm dark:text-gray-400">
-            Musharof Chowdhury
+            {displayName}
           </span>
           <span className="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">
-            randomuser@pimjo.com
+            {user?.email || ""}
           </span>
         </div>
 
@@ -83,7 +96,6 @@ export default function UserDropdown() {
               Edit profile
             </DropdownItem>
           </li>
-
           <li>
             <DropdownItem
               onItemClick={closeDropdown}
@@ -94,20 +106,8 @@ export default function UserDropdown() {
               Account settings
             </DropdownItem>
           </li>
-
-          <li>
-            <DropdownItem
-              onItemClick={closeDropdown}
-              tag="a"
-              to="/support"
-              className="flex items-center gap-3 px-3 py-2 font-medium rounded-lg text-theme-sm hover:bg-gray-100 dark:hover:bg-white/5"
-            >
-              Support
-            </DropdownItem>
-          </li>
         </ul>
 
-        {/* ✅ LOGOUT */}
         <button
           type="button"
           onClick={handleLogout}

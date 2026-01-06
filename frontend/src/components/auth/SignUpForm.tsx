@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "../../icons";
 import Label from "../form/Label";
 import Input from "../form/input/InputField";
 import Checkbox from "../form/input/Checkbox";
+import { useAuth } from "../../context/AuthContext";
+import { authApi } from "../../api/authApi";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5050";
 
@@ -12,8 +14,61 @@ function startGoogleOAuth() {
 }
 
 export default function SignUpForm() {
+  const navigate = useNavigate();
+  const { setUser } = useAuth();
+
+  // ✅ orgName required by backend
+  const [orgName, setOrgName] = useState("");
+
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
   const [showPassword, setShowPassword] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    if (!orgName || !firstName || !lastName || !email || !password) {
+      setError("Please fill in all required fields.");
+      return;
+    }
+
+    if (!isChecked) {
+      setError("Please accept the Terms and Conditions to continue.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // ✅ authApi.register returns { user, org, accessToken }
+      const { user } = await authApi.register({
+        orgName,
+        firstName,
+        lastName,
+        email,
+        password,
+      });
+
+      setUser(user);
+      navigate("/", { replace: true });
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Sign up failed. Please try again.";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="flex flex-col flex-1 w-full overflow-y-auto lg:w-1/2 no-scrollbar">
@@ -34,25 +89,19 @@ export default function SignUpForm() {
               Sign Up
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Enter your email and password to sign up!
+              Enter your details to sign up!
             </p>
           </div>
 
           <div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-5">
-              {/* Google button - KEEP same TailAdmin placement */}
               <button
                 type="button"
                 onClick={startGoogleOAuth}
                 className="inline-flex items-center justify-center gap-3 py-3 text-sm font-normal text-gray-700 transition-colors bg-gray-100 rounded-lg px-7 hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10"
               >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
+                {/* Google icon unchanged */}
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                   <path
                     d="M18.7511 10.1944C18.7511 9.47495 18.6915 8.94995 18.5626 8.40552H10.1797V11.6527H15.1003C15.0011 12.4597 14.4654 13.675 13.2749 14.4916L13.2582 14.6003L15.9087 16.6126L16.0924 16.6305C17.7788 15.1041 18.7511 12.8583 18.7511 10.1944Z"
                     fill="#4285F4"
@@ -62,7 +111,7 @@ export default function SignUpForm() {
                     fill="#34A853"
                   />
                   <path
-                    d="M5.10014 11.7305C4.91165 11.186 4.80257 10.6027 4.80257 9.99992C4.80257 9.3971 4.91165 8.81379 5.09022 8.26935L5.08523 8.1534L2.29464 6.02954L2.20333 6.0721C1.5982 7.25823 1.25098 8.5902 1.25098 9.99992C1.25098 11.4096 1.5982 12.7415 2.20333 13.9277L5.10014 11.7305Z"
+                    d="M5.10014 11.7305C4.91165 11.186 4.80257 10.6027 4.80257 9.99992C4.80257 9.3971 4.91165 10.6027 5.09022 8.26935L5.08523 8.1534L2.29464 6.02954L2.20333 6.0721C1.5982 7.25823 1.25098 8.5902 1.25098 9.99992C1.25098 11.4096 1.5982 12.7415 2.20333 13.9277L5.10014 11.7305Z"
                     fill="#FBBC05"
                   />
                   <path
@@ -73,19 +122,11 @@ export default function SignUpForm() {
                 Sign up with Google
               </button>
 
-              {/* X button unchanged */}
               <button
                 type="button"
                 className="inline-flex items-center justify-center gap-3 py-3 text-sm font-normal text-gray-700 transition-colors bg-gray-100 rounded-lg px-7 hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10"
               >
-                <svg
-                  width="21"
-                  className="fill-current"
-                  height="20"
-                  viewBox="0 0 21 20"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
+                <svg width="21" className="fill-current" height="20" viewBox="0 0 21 20">
                   <path d="M15.6705 1.875H18.4272L12.4047 8.75833L19.4897 18.125H13.9422L9.59717 12.4442L4.62554 18.125H1.86721L8.30887 10.7625L1.51221 1.875H7.20054L11.128 7.0675L15.6705 1.875ZM14.703 16.475H16.2305L6.37054 3.43833H4.73137L14.703 16.475Z" />
                 </svg>
                 Sign up with X
@@ -103,8 +144,27 @@ export default function SignUpForm() {
               </div>
             </div>
 
-            <form>
+            {error && (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-200">
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={onSubmit}>
               <div className="space-y-5">
+                {/* ✅ Org Name */}
+                <div>
+                  <Label>
+                    Business / Org Name<span className="text-error-500">*</span>
+                  </Label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. Connor Plumbing Pty Ltd"
+                    value={orgName}
+                    onChange={(e) => setOrgName((e.target as HTMLInputElement).value)}
+                  />
+                </div>
+
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                   <div className="sm:col-span-1">
                     <Label>
@@ -112,9 +172,9 @@ export default function SignUpForm() {
                     </Label>
                     <Input
                       type="text"
-                      id="fname"
-                      name="fname"
                       placeholder="Enter your first name"
+                      value={firstName}
+                      onChange={(e) => setFirstName((e.target as HTMLInputElement).value)}
                     />
                   </div>
 
@@ -124,9 +184,9 @@ export default function SignUpForm() {
                     </Label>
                     <Input
                       type="text"
-                      id="lname"
-                      name="lname"
                       placeholder="Enter your last name"
+                      value={lastName}
+                      onChange={(e) => setLastName((e.target as HTMLInputElement).value)}
                     />
                   </div>
                 </div>
@@ -137,9 +197,9 @@ export default function SignUpForm() {
                   </Label>
                   <Input
                     type="email"
-                    id="email"
-                    name="email"
                     placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail((e.target as HTMLInputElement).value)}
                   />
                 </div>
 
@@ -151,6 +211,8 @@ export default function SignUpForm() {
                     <Input
                       placeholder="Enter your password"
                       type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword((e.target as HTMLInputElement).value)}
                     />
                     <span
                       onClick={() => setShowPassword(!showPassword)}
@@ -173,22 +235,19 @@ export default function SignUpForm() {
                   />
                   <p className="inline-block font-normal text-gray-500 dark:text-gray-400">
                     By creating an account means you agree to the{" "}
-                    <span className="text-gray-800 dark:text-white/90">
-                      Terms and Conditions,
-                    </span>{" "}
+                    <span className="text-gray-800 dark:text-white/90">Terms and Conditions,</span>{" "}
                     and our{" "}
-                    <span className="text-gray-800 dark:text-white">
-                      Privacy Policy
-                    </span>
+                    <span className="text-gray-800 dark:text-white">Privacy Policy</span>
                   </p>
                 </div>
 
                 <div>
                   <button
-                    type="button"
-                    className="flex items-center justify-center w-full px-4 py-3 text-sm font-medium text-white transition rounded-lg bg-brand-500 shadow-theme-xs hover:bg-brand-600"
+                    type="submit"
+                    disabled={loading}
+                    className="flex items-center justify-center w-full px-4 py-3 text-sm font-medium text-white transition rounded-lg bg-brand-500 shadow-theme-xs hover:bg-brand-600 disabled:opacity-60"
                   >
-                    Sign Up
+                    {loading ? "Signing up..." : "Sign Up"}
                   </button>
                 </div>
               </div>
