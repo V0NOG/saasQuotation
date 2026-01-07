@@ -1,3 +1,4 @@
+// backend/server.js
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -8,7 +9,7 @@ const passport = require("passport");
 const userRoutes = require("./routes/user.routes");
 
 const { connectDB } = require("./config/db");
-require("./config/passport"); 
+require("./config/passport");
 
 const authRoutes = require("./routes/auth.routes");
 const googleAuthRoutes = require("./routes/auth.google");
@@ -17,7 +18,13 @@ const customerRoutes = require("./routes/customer.routes");
 const pricebookRoutes = require("./routes/pricebook.routes");
 const quoteRoutes = require("./routes/quote.routes");
 
+// ✅ ADD THIS
+const publicQuoteRoutes = require("./routes/publicQuote.routes");
+
 const app = express();
+
+// ✅ Optional but recommended if you ever deploy behind proxy (Railway/Render/NGINX/Lightsail LB)
+// app.set("trust proxy", 1);
 
 app.use(helmet());
 app.use(morgan("dev"));
@@ -41,6 +48,10 @@ app.use("/api/org", orgRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/pricebook", pricebookRoutes);
 app.use("/api/quotes", quoteRoutes);
+
+// ✅ MOUNT PUBLIC ROUTES HERE
+app.use("/api/public", publicQuoteRoutes);
+
 app.use("/api/users", require("./routes/user.routes"));
 app.use("/api/user", userRoutes);
 

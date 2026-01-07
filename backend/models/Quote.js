@@ -28,6 +28,26 @@ const QuoteLineSchema = new mongoose.Schema(
   { _id: true }
 );
 
+const QuoteStatusHistorySchema = new mongoose.Schema(
+  {
+    from: { type: String, enum: ["draft", "sent", "accepted", "declined"], required: true },
+    to: { type: String, enum: ["draft", "sent", "accepted", "declined"], required: true },
+    at: { type: Date, default: Date.now, required: true },
+
+    // who initiated the change
+    actorType: { type: String, enum: ["user", "public", "system"], required: true },
+    actorUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+
+    // extra metadata for public actions
+    meta: {
+      ip: { type: String, default: "" },
+      userAgent: { type: String, default: "" },
+      note: { type: String, default: "" },
+    },
+  },
+  { _id: false }
+);
+
 const QuoteSchema = new mongoose.Schema(
   {
     orgId: { type: mongoose.Schema.Types.ObjectId, ref: "Org", required: true, index: true },
@@ -35,6 +55,11 @@ const QuoteSchema = new mongoose.Schema(
 
     quoteNumber: { type: String, required: true, index: true }, // e.g. Q-20260107-AB12
     status: { type: String, enum: ["draft", "sent", "accepted", "declined"], default: "draft", index: true },
+
+    // Public share token (unguessable)
+    publicToken: { type: String, default: null, index: true },
+    publicTokenCreatedAt: { type: Date, default: null },
+    publicTokenExpiresAt: { type: Date, default: null }, // optional (null = never expires)
 
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", default: null },
     customerSnapshot: {
@@ -48,7 +73,6 @@ const QuoteSchema = new mongoose.Schema(
     notes: { type: String, default: "" },
 
     // Quote-level GST mode for DISPLAY
-    // (we store canonical unitPriceExTax regardless)
     pricingMode: { type: String, enum: ["exclusive", "inclusive"], default: "exclusive" },
 
     lines: { type: [QuoteLineSchema], default: [] },
@@ -61,10 +85,24 @@ const QuoteSchema = new mongoose.Schema(
     // Dates
     issueDate: { type: Date, default: Date.now },
     validUntil: { type: Date, default: null },
+
+    // Lifecycle timestamps
+    sentAt: { type: Date, default: null },
+    acceptedAt: { type: Date, default: null },
+    declinedAt: { type: Date, default: null },
+
+    // Locking
+    lockedAt: { type: Date, default: null }, // set when accepted
+
+    // Audit trail
+    statusHistory: { type: [QuoteStatusHistorySchema], default: [] },
   },
   { timestamps: true }
 );
 
 QuoteSchema.index({ orgId: 1, quoteNumber: 1 }, { unique: true });
+
+// If token exists, keep it unique. Sparse allows many nulls.
+QuoteSchema.index({ publicToken: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model("Quote", QuoteSchema);

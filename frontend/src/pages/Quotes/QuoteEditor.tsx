@@ -5,27 +5,29 @@ import PageBreadCrumb from "../../components/common/PageBreadCrumb";
 import Button from "../../components/ui/button/Button";
 import Input from "../../components/form/input/InputField";
 
-// ✅ match your existing CustomersList pattern
 import { customersApi, type Customer } from "../../api/customersApi";
-
-import {
-  quoteApi,
-  type QuoteLine,
-  type PricingMode,
-  type QuoteStatus,
-} from "../../api/quoteApi";
+import { quoteApi, type QuoteLine, type PricingMode, type QuoteStatus, type Quote } from "../../api/quoteApi";
 import { pricebookApi, type PriceItem } from "../../api/pricebookApi";
 
 function round2(n: number) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
-// UI helper: display unit price based on mode
 function displayUnitPrice(line: QuoteLine, mode: PricingMode, orgTaxRate = 0.1) {
   const rate = line.taxRate ?? orgTaxRate;
   const ex = Number(line.unitPriceExTax || 0);
   if (mode === "inclusive") return round2(ex * (1 + rate));
   return round2(ex);
+}
+
+function isLockedQuote(q: Quote | null) {
+  if (!q) return false;
+  return q.status === "accepted" || !!q.lockedAt;
+}
+
+function downloadQuotePdf(quoteId: string) {
+  const url = `${import.meta.env.VITE_API_BASE_URL}/api/quotes/${quoteId}/pdf`;
+  window.open(url, "_blank");
 }
 
 export default function QuoteEditor() {
@@ -40,14 +42,18 @@ export default function QuoteEditor() {
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
 
-  // Basic fields
+  const [quoteId, setQuoteId] = useState<string | null>(isNew ? null : (id as string));
+  const [publicToken, setPublicToken] = useState<string | null>(null);
+
   const [status, setStatus] = useState<QuoteStatus>("draft");
+  const [lockedAt, setLockedAt] = useState<string | null>(null);
+
   const [pricingMode, setPricingMode] = useState<PricingMode>("exclusive");
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Customer snapshot
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerResults, setCustomerResults] = useState<Customer[]>([]);
@@ -58,16 +64,15 @@ export default function QuoteEditor() {
     address: "",
   });
 
-  // Lines
   const [lines, setLines] = useState<QuoteLine[]>([]);
 
-  // Pricebook search
   const [pbType, setPbType] = useState<"service" | "material">("service");
   const [pbSearch, setPbSearch] = useState("");
   const [pbItems, setPbItems] = useState<PriceItem[]>([]);
 
-  // Totals shown (server calculates final totals; UI preview only)
   const orgTaxRate = 0.1;
+
+  const isLocked = status === "accepted" || !!lockedAt;
 
   useEffect(() => {
     let cancelled = false;
@@ -79,12 +84,15 @@ export default function QuoteEditor() {
         const q = await quoteApi.getById(id!);
         if (cancelled) return;
 
+        setQuoteId(q._id);
         setStatus(q.status);
+        setLockedAt((q.lockedAt as any) ?? null);
+        setPublicToken((q.publicToken as any) ?? null);
+
         setPricingMode(q.pricingMode);
         setTitle(q.title || "");
         setNotes(q.notes || "");
 
-        // if your API returns customerId, keep it; otherwise snapshot still works
         setCustomerId((q as any).customerId || null);
         setCustomerSnapshot({
           name: q.customerSnapshot?.name || "",
@@ -155,6 +163,7 @@ export default function QuoteEditor() {
   }, [customerSearch]);
 
   function addFromPricebook(item: PriceItem) {
+    if (isLocked) return;
     const line: QuoteLine = {
       itemId: item._id,
       type: item.type,
@@ -170,10 +179,12 @@ export default function QuoteEditor() {
   }
 
   function updateLine(idx: number, patch: Partial<QuoteLine>) {
+    if (isLocked) return;
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
   }
 
   function removeLine(idx: number) {
+    if (isLocked) return;
     setLines((prev) => prev.filter((_, i) => i !== idx));
   }
 
@@ -204,10 +215,14 @@ export default function QuoteEditor() {
   }
 
   async function save() {
+    if (isLocked) {
+      alert("This quote is locked and cannot be edited.");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
-        status,
+        // status is NOT edited here; lifecycle endpoints handle it
         pricingMode,
         title,
         notes,
@@ -222,37 +237,55 @@ export default function QuoteEditor() {
       } else {
         await quoteApi.update(id!, payload as any);
       }
+    } catch (e: any) {
+      alert(e?.response?.data?.message || "Could not save quote.");
     } finally {
       setSaving(false);
     }
   }
 
+  async function sendQuote() {
+    if (!quoteId) return;
+    if (status !== "draft") return;
+    setSending(true);
+    try {
+      const q = await quoteApi.send(quoteId);
+      setStatus(q.status);
+      setPublicToken((q.publicToken as any) ?? null);
+      alert("Quote sent! Public link is now available.");
+    } catch (e: any) {
+      alert(e?.response?.data?.message || "Could not send quote.");
+    } finally {
+      setSending(false);
+    }
+  }
+
   const preview = computePreviewTotals();
+  const publicUrl = publicToken ? `${window.location.origin}/quote/view/${publicToken}` : null;
 
   return (
     <div>
       <PageBreadCrumb title={isNew ? "Create Quote" : "Edit Quote"} breadCrumb={bread as any} />
 
+      {isLocked ? (
+        <div className="mt-4 rounded-2xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-900 dark:border-yellow-900/40 dark:bg-yellow-900/10 dark:text-yellow-200">
+          This quote is <b>locked</b> (status: {status}). Editing is disabled.
+        </div>
+      ) : null}
+
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        {/* LEFT: Quote + Customer */}
         <div className="xl:col-span-2 space-y-4">
           <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
-                <select
-                  className="h-[44px] rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-brand-500 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as any)}
-                >
-                  <option value="draft">Draft</option>
-                  <option value="sent">Sent</option>
-                  <option value="accepted">Accepted</option>
-                  <option value="declined">Declined</option>
-                </select>
+                <div className="text-sm text-gray-600 dark:text-gray-300">
+                  Status: <span className="font-semibold text-gray-900 dark:text-white">{status}</span>
+                </div>
 
                 <select
-                  className="h-[44px] rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-brand-500 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
+                  className="h-[44px] rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-brand-500 disabled:opacity-60 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
                   value={pricingMode}
+                  disabled={isLocked}
                   onChange={(e) => setPricingMode(e.target.value as any)}
                   title="How prices are displayed on this quote"
                 >
@@ -261,20 +294,78 @@ export default function QuoteEditor() {
                 </select>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 justify-end">
                 <Link to="/quotes">
                   <Button variant="outline">Back</Button>
                 </Link>
-                <Button onClick={save} disabled={saving}>
+
+                {!isNew && status === "draft" ? (
+                  <Button onClick={sendQuote} disabled={sending}>
+                    {sending ? "Sending..." : "Send Quote"}
+                  </Button>
+                ) : null}
+
+                <Button onClick={save} disabled={saving || isLocked}>
                   {saving ? "Saving..." : "Save Quote"}
                 </Button>
               </div>
             </div>
 
+            {!isNew && quoteId ? (
+                <Button variant="outline" onClick={() => downloadQuotePdf(quoteId)}>
+                    Download PDF
+                </Button>
+            ) : null}
+
+            {!isNew && quoteId && publicToken ? (
+                <Button
+                    variant="outline"
+                    onClick={async () => {
+                    try {
+                        await quoteApi.update(quoteId, {} as any); // noop if you want; optional
+                        // call email endpoint via http directly (since quoteApi doesn’t have it yet)
+                        // easiest: add quoteApi.email() next (below)
+                    } catch {}
+                    }}
+                >
+                    Email Quote
+                </Button>
+            ) : null}
+
+            {!isNew && quoteId && publicToken ? (
+                <Button
+                    variant="outline"
+                    onClick={async () => {
+                    try {
+                        await quoteApi.email(quoteId, { attachPdf: true });
+                        alert("Email sent!");
+                    } catch (e: any) {
+                        alert(e?.response?.data?.message || "Could not send email.");
+                    }
+                    }}
+                >
+                    Email Quote
+                </Button>
+            ) : null}
+
+            {publicUrl ? (
+              <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm dark:border-gray-800 dark:bg-gray-800/40">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="text-gray-700 dark:text-gray-200">
+                    Public link:{" "}
+                    <a className="text-brand-600 hover:underline" href={publicUrl} target="_blank" rel="noreferrer">
+                      {publicUrl}
+                    </a>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="md:col-span-2">
                 <Input
                   value={title}
+                  disabled={isLocked}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Quote title (optional)"
                 />
@@ -286,6 +377,7 @@ export default function QuoteEditor() {
 
                   <Input
                     value={customerSearch}
+                    disabled={isLocked}
                     onChange={(e) => setCustomerSearch(e.target.value)}
                     placeholder="Search customers by name/email/phone…"
                   />
@@ -295,6 +387,7 @@ export default function QuoteEditor() {
                       {customerResults.map((c) => (
                         <button
                           key={c._id}
+                          disabled={isLocked}
                           onClick={() => {
                             setCustomerId(c._id);
                             setCustomerSearch("");
@@ -306,11 +399,9 @@ export default function QuoteEditor() {
                               address: formatCustomerAddress(c),
                             });
                           }}
-                          className="w-full rounded-lg px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800"
+                          className="w-full rounded-lg px-3 py-2 text-left hover:bg-gray-50 disabled:opacity-60 dark:hover:bg-gray-800"
                         >
-                          <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                            {c.name}
-                          </div>
+                          <div className="text-sm font-semibold text-gray-900 dark:text-white">{c.name}</div>
                           <div className="text-xs text-gray-500">
                             {[c.email, c.phone].filter(Boolean).join(" • ") || "—"}
                           </div>
@@ -334,11 +425,12 @@ export default function QuoteEditor() {
                           ) : null}
                         </div>
                         <button
+                          disabled={isLocked}
                           onClick={() => {
                             setCustomerId(null);
                             setCustomerSnapshot({ name: "", email: "", phone: "", address: "" });
                           }}
-                          className="rounded-lg px-3 py-1 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-gray-800"
+                          className="rounded-lg px-3 py-1 text-sm text-red-600 hover:bg-red-50 disabled:opacity-60 dark:hover:bg-gray-800"
                         >
                           Clear
                         </button>
@@ -350,9 +442,10 @@ export default function QuoteEditor() {
 
               <div className="md:col-span-2">
                 <textarea
-                  className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:border-brand-500 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
+                  className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:border-brand-500 disabled:opacity-60 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
                   rows={3}
                   value={notes}
+                  disabled={isLocked}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Notes / Scope / Terms (optional)"
                 />
@@ -360,7 +453,6 @@ export default function QuoteEditor() {
             </div>
           </div>
 
-          {/* Lines */}
           <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">Line items</h3>
 
@@ -391,11 +483,13 @@ export default function QuoteEditor() {
                           <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
                             <Input
                               value={l.name}
+                              disabled={isLocked}
                               onChange={(e) => updateLine(idx, { name: e.target.value })}
                               placeholder="Line name"
                             />
                             <Input
                               value={l.description || ""}
+                              disabled={isLocked}
                               onChange={(e) => updateLine(idx, { description: e.target.value })}
                               placeholder="Description"
                             />
@@ -405,6 +499,7 @@ export default function QuoteEditor() {
                         <td className="px-3 py-3">
                           <Input
                             type="number"
+                            disabled={isLocked}
                             value={String(l.quantity ?? 0)}
                             onChange={(e) => updateLine(idx, { quantity: Number(e.target.value || 0) })}
                           />
@@ -413,6 +508,7 @@ export default function QuoteEditor() {
                         <td className="px-3 py-3">
                           <Input
                             type="number"
+                            disabled={isLocked}
                             value={String(displayUnitPrice(l, pricingMode, orgTaxRate))}
                             onChange={(e) => {
                               const entered = Number(e.target.value || 0);
@@ -429,6 +525,7 @@ export default function QuoteEditor() {
                         <td className="px-3 py-3">
                           <Input
                             type="number"
+                            disabled={isLocked}
                             value={
                               l.taxRate === null || l.taxRate === undefined
                                 ? ""
@@ -445,8 +542,9 @@ export default function QuoteEditor() {
 
                         <td className="px-3 py-3 text-right">
                           <button
+                            disabled={isLocked}
                             onClick={() => removeLine(idx)}
-                            className="rounded-lg px-3 py-1 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-gray-800"
+                            className="rounded-lg px-3 py-1 text-sm text-red-600 hover:bg-red-50 disabled:opacity-60 dark:hover:bg-gray-800"
                           >
                             Remove
                           </button>
@@ -460,22 +558,22 @@ export default function QuoteEditor() {
           </div>
         </div>
 
-        {/* RIGHT: Pricebook picker + Totals */}
         <div className="space-y-4">
           <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">Add from Pricebook</h3>
 
             <div className="mt-3 flex gap-2">
               <select
-                className="h-[44px] w-[160px] rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-brand-500 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
+                className="h-[44px] w-[160px] rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-brand-500 disabled:opacity-60 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
                 value={pbType}
+                disabled={isLocked}
                 onChange={(e) => setPbType(e.target.value as any)}
               >
                 <option value="service">Services</option>
                 <option value="material">Materials</option>
               </select>
               <div className="flex-1">
-                <Input value={pbSearch} onChange={(e) => setPbSearch(e.target.value)} placeholder="Search…" />
+                <Input value={pbSearch} disabled={isLocked} onChange={(e) => setPbSearch(e.target.value)} placeholder="Search…" />
               </div>
             </div>
 
@@ -486,8 +584,9 @@ export default function QuoteEditor() {
                 pbItems.map((it) => (
                   <button
                     key={it._id}
+                    disabled={isLocked}
                     onClick={() => addFromPricebook(it)}
-                    className="w-full rounded-xl border border-gray-200 p-3 text-left hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800"
+                    className="w-full rounded-xl border border-gray-200 p-3 text-left hover:bg-gray-50 disabled:opacity-60 dark:border-gray-800 dark:hover:bg-gray-800"
                   >
                     <div className="flex items-center justify-between">
                       <div className="text-sm font-semibold text-gray-900 dark:text-white">{it.name}</div>

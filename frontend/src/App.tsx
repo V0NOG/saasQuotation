@@ -97,6 +97,9 @@ import Materials from "./pages/Pricebook/Materials";
 import QuotesList from "./pages/Quotes/QuotesList";
 import QuoteEditor from "./pages/Quotes/QuoteEditor";
 
+// ✅ NEW: public quote view
+import PublicQuoteView from "./pages/PublicQuote/PublicQuoteView";
+
 export default function App() {
   return (
     <Router>
@@ -109,6 +112,9 @@ export default function App() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/two-step-verification" element={<TwoStepVerification />} />
         <Route path="/auth/callback" element={<OAuthCallBack />} />
+
+        {/* ✅ PUBLIC quote view (no login) */}
+        <Route path="/quote/view/:token" element={<PublicQuoteView />} />
 
         {/* PUBLIC special pages */}
         <Route path="/maintenance" element={<Maintenance />} />

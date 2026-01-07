@@ -6,6 +6,34 @@ import Input from "../../components/form/input/InputField";
 import Button from "../../components/ui/button/Button";
 import { quoteApi, type Quote, type QuoteStatus } from "../../api/quoteApi";
 
+function StatusBadge({ status }: { status: QuoteStatus }) {
+  const base =
+    "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold";
+
+  if (status === "draft") return <span className={`${base} bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200`}>Draft</span>;
+  if (status === "sent") return <span className={`${base} bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200`}>Sent</span>;
+  if (status === "accepted") return <span className={`${base} bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-200`}>Accepted</span>;
+  return <span className={`${base} bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-200`}>Declined</span>;
+}
+
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // fallback
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  }
+}
+
 export default function QuotesList() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<QuoteStatus | "">("");
@@ -15,6 +43,7 @@ export default function QuotesList() {
   const [items, setItems] = useState<Quote[]>([]);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [sendingId, setSendingId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -46,6 +75,25 @@ export default function QuotesList() {
     if (!ok) return;
     await quoteApi.remove(q._id);
     await load();
+  }
+
+  async function onSend(q: Quote) {
+    if (q.status !== "draft") return;
+    setSendingId(q._id);
+    try {
+      await quoteApi.send(q._id);
+      await load();
+    } finally {
+      setSendingId(null);
+    }
+  }
+
+  async function onCopyLink(q: Quote) {
+    if (!q.publicToken) return;
+    const url = `${window.location.origin}/quote/view/${q.publicToken}`;
+    const ok = await copyToClipboard(url);
+    if (ok) alert("Public link copied!");
+    else alert("Could not copy link.");
   }
 
   return (
@@ -104,21 +152,54 @@ export default function QuotesList() {
                         {q.quoteNumber}
                       </Link>
                       {q.title ? <div className="text-xs text-gray-500">{q.title}</div> : null}
+                      {q.publicToken ? (
+                        <div className="mt-1 text-xs text-gray-500">
+                          Public link available
+                        </div>
+                      ) : null}
                     </td>
+
                     <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
                       {q.customerSnapshot?.name || "—"}
                       {q.customerSnapshot?.email ? <div className="text-xs text-gray-500">{q.customerSnapshot.email}</div> : null}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{q.status}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{(q.totalIncTax ?? 0).toFixed(2)}</td>
+
+                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                      <StatusBadge status={q.status} />
+                    </td>
+
+                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                      {(q.totalIncTax ?? 0).toFixed(2)}
+                    </td>
+
                     <td className="px-4 py-3 text-right">
-                      <div className="inline-flex gap-2">
+                      <div className="inline-flex flex-wrap justify-end gap-2">
                         <Link
                           to={`/quotes/${q._id}`}
                           className="rounded-lg px-3 py-1 text-sm text-brand-600 hover:bg-brand-50 dark:hover:bg-gray-800"
                         >
-                          Edit
+                          {q.status === "accepted" ? "View" : "Edit"}
                         </Link>
+
+                        {q.status === "draft" ? (
+                          <button
+                            onClick={() => onSend(q)}
+                            disabled={sendingId === q._id}
+                            className="rounded-lg px-3 py-1 text-sm text-white bg-brand-600 hover:bg-brand-700 disabled:opacity-60"
+                          >
+                            {sendingId === q._id ? "Sending..." : "Send"}
+                          </button>
+                        ) : null}
+
+                        {q.publicToken ? (
+                          <button
+                            onClick={() => onCopyLink(q)}
+                            className="rounded-lg px-3 py-1 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
+                          >
+                            Copy link
+                          </button>
+                        ) : null}
+
                         <button
                           onClick={() => onDelete(q)}
                           className="rounded-lg px-3 py-1 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-gray-800"

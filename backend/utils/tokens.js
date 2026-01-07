@@ -1,4 +1,6 @@
+// backend/utils/tokens.js
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 
 function signAccessToken(user) {
   return jwt.sign(
@@ -28,10 +30,10 @@ function refreshCookieOptions() {
   const isProd = process.env.NODE_ENV === "production";
   return {
     httpOnly: true,
-    secure: isProd,       // localhost dev = false
-    sameSite: "lax",      // works with OAuth redirects on localhost
-    path: "/api/auth",    // cookie only sent to auth routes
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30d
+    secure: isProd,
+    sameSite: "lax",
+    path: "/api/auth",
+    maxAge: 30 * 24 * 60 * 60 * 1000,
   };
 }
 
@@ -54,6 +56,13 @@ function verifyRefreshToken(token) {
   return jwt.verify(token, process.env.JWT_REFRESH_SECRET);
 }
 
+// Public quote token (unguessable, URL-safe)
+// 32 bytes => 256-bit security. You can tweak via env if desired.
+function generatePublicToken() {
+  const bytes = Math.max(parseInt(process.env.QUOTE_PUBLIC_TOKEN_BYTES || "32", 10), 16);
+  return crypto.randomBytes(bytes).toString("base64url");
+}
+
 module.exports = {
   signAccessToken,
   signRefreshToken,
@@ -62,4 +71,5 @@ module.exports = {
   refreshCookieOptions,
   setRefreshCookie,
   clearRefreshCookie,
+  generatePublicToken,
 };
