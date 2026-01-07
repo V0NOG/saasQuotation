@@ -5,6 +5,7 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
 const passport = require("passport");
+const userRoutes = require("./routes/user.routes");
 
 const { connectDB } = require("./config/db");
 require("./config/passport"); 
@@ -34,6 +35,8 @@ app.get("/health", (req, res) => res.json({ ok: true }));
 app.use("/api/auth", authRoutes);
 app.use("/api/auth", googleAuthRoutes);
 app.use("/api/org", orgRoutes);
+app.use("/api/users", require("./routes/user.routes"));
+app.use("/api/user", userRoutes);
 
 const port = process.env.PORT || 5050;
 

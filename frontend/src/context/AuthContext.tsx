@@ -1,40 +1,75 @@
+// frontend/src/context/AuthContext.tsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { setAccessToken } from "../api/http";
-import { authApi } from "../api/authApi";
+
+export type SocialLinks = {
+  facebook?: string;
+  x?: string;
+  linkedin?: string;
+  instagram?: string;
+};
 
 export type AuthUser = {
-  _id: string;
+  id: string; // IMPORTANT: your backend returns user.id, not _id
   firstName?: string;
   lastName?: string;
-  name?: string;
   email: string;
+  role?: string;
+
+  // profile fields
+  bio?: string;
+  phone?: string;
+  socials?: SocialLinks;
+  address?: {
+    country?: string;
+    cityState?: string;
+    postalCode?: string;
+    taxId?: string;
+  };
+};
+
+export type AuthOrg = {
+  id: string;
+  name: string;
+  currency: string;
+  taxRate: number;
+  branding: {
+    logoUrl: string;
+    primaryColor: string;
+    accentColor: string;
+  };
+  industry?: "plumber" | "electrician" | "both";
 };
 
 type AuthContextValue = {
   user: AuthUser | null;
+  org: AuthOrg | null;
   isAuthenticated: boolean;
-  setUser: (u: AuthUser | null) => void;
-  logout: () => void;
-  refreshMe: () => Promise<void>;
-};
 
-const USER_KEY = "authUser";
+  // ✅ these MUST exist
+  setUser: (u: AuthUser | null) => void;
+  setOrg: (o: AuthOrg | null) => void;
+
+  logout: () => void;
+};
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-function safeParseUser(raw: string | null): AuthUser | null {
+const USER_KEY = "authUser";
+const ORG_KEY = "authOrg";
+
+function safeParse<T>(raw: string | null): T | null {
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as AuthUser;
+    return JSON.parse(raw) as T;
   } catch {
     return null;
   }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUserState] = useState<AuthUser | null>(() =>
-    safeParseUser(localStorage.getItem(USER_KEY))
-  );
+  const [user, setUserState] = useState<AuthUser | null>(() => safeParse<AuthUser>(localStorage.getItem(USER_KEY)));
+  const [org, setOrgState] = useState<AuthOrg | null>(() => safeParse<AuthOrg>(localStorage.getItem(ORG_KEY)));
 
   const setUser = (u: AuthUser | null) => {
     setUserState(u);
@@ -42,50 +77,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     else localStorage.removeItem(USER_KEY);
   };
 
+  const setOrg = (o: AuthOrg | null) => {
+    setOrgState(o);
+    if (o) localStorage.setItem(ORG_KEY, JSON.stringify(o));
+    else localStorage.removeItem(ORG_KEY);
+  };
+
   const logout = () => {
-    // clears token + dispatches auth:changed (your http.ts already does this)
     setAccessToken(null);
     setUser(null);
+    setOrg(null);
   };
 
-  const refreshMe = async () => {
-    try {
-      const me = await authApi.me();
-      setUser(me);
-    } catch {
-      // token invalid or backend says no -> fully log out
-      logout();
-    }
-  };
-
-  // When token changes (login/logout), sync user
+  // keep in sync if http.ts dispatches auth:changed
   useEffect(() => {
     const onAuthChanged = () => {
       const token = localStorage.getItem("userToken");
-      if (!token) setUser(null);
+      if (!token) {
+        setUser(null);
+        setOrg(null);
+      }
     };
     window.addEventListener("auth:changed", onAuthChanged);
     return () => window.removeEventListener("auth:changed", onAuthChanged);
   }, []);
 
-  // Optional: on first mount, fetch /me if token exists
-  useEffect(() => {
-    const token = localStorage.getItem("userToken");
-    if (token && !user) {
-      refreshMe();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
+      org,
       isAuthenticated: !!user,
       setUser,
+      setOrg,
       logout,
-      refreshMe,
     }),
-    [user]
+    [user, org]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

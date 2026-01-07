@@ -119,9 +119,14 @@ export default function App() {
           <Route path="/video-generator" element={<VideoGeneratorPage />} />
         </Route>
 
-        {/* PROTECTED app */}
+        {/* ✅ PROTECTED app */}
         <Route
-          route element={<RequireAuth><AppLayout /></RequireAuth>}>
+          element={
+            <RequireAuth>
+              <AppLayout />
+            </RequireAuth>
+          }
+        >
           <Route index element={<Ecommerce />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/marketing" element={<Marketing />} />

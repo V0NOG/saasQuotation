@@ -1,3 +1,4 @@
+// backend/models/User.js
 const mongoose = require("mongoose");
 
 const UserSchema = new mongoose.Schema(
@@ -12,16 +13,30 @@ const UserSchema = new mongoose.Schema(
     passwordHash: { type: String, default: "" }, // empty for Google-only users
     role: { type: String, enum: ["owner", "admin", "staff"], default: "owner" },
 
+    // ✅ Profile fields
+    bio: { type: String, default: "" },
+    phone: { type: String, default: "" },
+    socials: {
+      facebook: { type: String, default: "" },
+      x: { type: String, default: "" },
+      linkedin: { type: String, default: "" },
+      instagram: { type: String, default: "" },
+    },
+    address: {
+        country: { type: String, default: "" },
+        cityState: { type: String, default: "" },
+        postalCode: { type: String, default: "" },
+        taxId: { type: String, default: "" },
+    },
+
     google: {
-      sub: { type: String, default: "" }, // Google user id
-      email: { type: String, default: "" }
-    }
+      sub: { type: String, default: "" },
+      email: { type: String, default: "" },
+    },
   },
   { timestamps: true }
 );
 
-// unique per org (same email can exist in different orgs if you want)
-// If you prefer global unique emails, change index to { unique: true } without orgId.
 UserSchema.index({ orgId: 1, email: 1 }, { unique: true });
 
 module.exports = mongoose.model("User", UserSchema);

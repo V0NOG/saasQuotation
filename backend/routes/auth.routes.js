@@ -5,6 +5,8 @@ const passport = require("passport"); // use global passport (server.js initiali
 const Org = require("../models/Org");
 const User = require("../models/User");
 
+const { requireAuth } = require("../middleware/auth"); // ✅ add
+
 const {
   signAccessToken,
   signRefreshToken,
@@ -14,6 +16,32 @@ const {
 } = require("../utils/tokens");
 
 const router = express.Router();
+
+/**
+ * GET /api/auth/me
+ * Return current user (from access token)
+ */
+router.get("/me", requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select(
+      "_id firstName lastName email role orgId"
+    );
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    return res.json({
+      user: {
+        id: user._id,
+        firstName: user.firstName || "",
+        lastName: user.lastName || "",
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (e) {
+    console.error("me error:", e);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
 
 /**
  * POST /api/auth/register
@@ -151,8 +179,6 @@ router.get(
       const refreshToken = signRefreshToken(user);
       setRefreshCookie(res, refreshToken);
 
-      // Redirect back to frontend with access token in query string
-      // (refresh token stays in httpOnly cookie)
       const redirectUrl = new URL(`${process.env.FRONTEND_URL}/auth/callback`);
       redirectUrl.searchParams.set("accessToken", accessToken);
 
@@ -166,7 +192,6 @@ router.get(
 
 /**
  * POST /api/auth/refresh
- * Uses httpOnly refresh cookie to mint a new access token
  */
 router.post("/refresh", async (req, res) => {
   try {
@@ -178,13 +203,11 @@ router.post("/refresh", async (req, res) => {
       return res.status(401).json({ message: "Invalid refresh token" });
     }
 
-    // Re-load user so role/orgId are guaranteed current
     const user = await User.findById(payload.sub).select("_id orgId role");
     if (!user) return res.status(401).json({ message: "User not found" });
 
     const accessToken = signAccessToken(user);
 
-    // Optional: rotate refresh token each time (recommended)
     const newRefreshToken = signRefreshToken(user);
     setRefreshCookie(res, newRefreshToken);
 
@@ -196,7 +219,6 @@ router.post("/refresh", async (req, res) => {
 
 /**
  * POST /api/auth/logout
- * Clears refresh cookie
  */
 router.post("/logout", (req, res) => {
   clearRefreshCookie(res);
