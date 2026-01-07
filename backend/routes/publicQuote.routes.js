@@ -35,7 +35,7 @@ router.get("/quotes/:token", async (req, res) => {
   }
 });
 
-// ✅ GET /api/public/quotes/:token/pdf
+// GET /api/public/quotes/:token/pdf
 router.get("/quotes/:token/pdf", async (req, res) => {
   try {
     const token = String(req.params.token || "").trim();
@@ -45,14 +45,15 @@ router.get("/quotes/:token/pdf", async (req, res) => {
     if (!quote) return res.status(404).json({ message: "Quote not found" });
     if (isTokenExpired(quote)) return res.status(410).json({ message: "Quote link expired" });
 
-    // Optional org info (name/branding later)
-    const org = quote.orgId ? await Org.findById(quote.orgId).select("name orgName branding logoUrl colors") : null;
+    const org = quote.orgId
+      ? await Org.findById(quote.orgId).select("name orgName")
+      : null;
 
     const pdfBuffer = await renderQuotePdf({ quote, org });
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${quote.quoteNumber}.pdf"`);
-    res.setHeader("Content-Length", pdfBuffer.length);
+    res.setHeader("Content-Length", String(pdfBuffer.length));
 
     return res.status(200).send(pdfBuffer);
   } catch (e) {
@@ -95,7 +96,6 @@ router.post("/quotes/:token/accept", async (req, res) => {
     quote.lockedAt = now;
 
     await quote.save();
-
     return res.json({ quote });
   } catch (e) {
     console.error("public quote accept error:", e);
@@ -136,7 +136,6 @@ router.post("/quotes/:token/decline", async (req, res) => {
     quote.declinedAt = now;
 
     await quote.save();
-
     return res.json({ quote });
   } catch (e) {
     console.error("public quote decline error:", e);

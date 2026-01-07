@@ -1,22 +1,23 @@
 // backend/routes/quote.routes.js
 const express = require("express");
+const mongoose = require("mongoose");
 const Quote = require("../models/Quote");
 const Org = require("../models/Org");
+const Customer = require("../models/Customer");
 const { requireAuth } = require("../middleware/auth");
 const { computeQuoteTotals } = require("../utils/quoteMath");
-const Customer = require("../models/Customer");
 const { generatePublicToken } = require("../utils/tokens");
-const { renderQuotePdf } = require("../utils/quotePdf");
+const { streamQuotePdf, renderQuotePdf } = require("../utils/quotePdf");
 const { sendQuoteEmail } = require("../utils/mailer");
-
-const mongoose = require("mongoose");
 
 const router = express.Router();
 
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-
+function requireValidObjectId(id) {
+  return mongoose.isValidObjectId(id);
+}
 function generateQuoteNumber() {
   const d = new Date();
   const y = d.getFullYear();
@@ -25,16 +26,11 @@ function generateQuoteNumber() {
   const rand = Math.random().toString(16).slice(2, 6).toUpperCase();
   return `Q-${y}${m}${day}-${rand}`;
 }
-
 function isLocked(quote) {
   return quote.status === "accepted" || !!quote.lockedAt;
 }
 
-function requireValidObjectId(id) {
-  return mongoose.isValidObjectId(id);
-}
-
-// GET /api/quotes?search=&status=&page=&limit=
+// GET /api/quotes
 router.get("/", requireAuth, async (req, res) => {
   try {
     const orgId = req.user.orgId;
@@ -50,12 +46,7 @@ router.get("/", requireAuth, async (req, res) => {
 
     if (search) {
       const rx = new RegExp(escapeRegex(search), "i");
-      filter.$or = [
-        { quoteNumber: rx },
-        { title: rx },
-        { "customerSnapshot.name": rx },
-        { "customerSnapshot.email": rx },
-      ];
+      filter.$or = [{ quoteNumber: rx }, { title: rx }, { "customerSnapshot.name": rx }, { "customerSnapshot.email": rx }];
     }
 
     const [items, total] = await Promise.all([
@@ -69,13 +60,7 @@ router.get("/", requireAuth, async (req, res) => {
       Quote.countDocuments(filter),
     ]);
 
-    return res.json({
-      items,
-      page,
-      limit,
-      total,
-      totalPages: Math.max(Math.ceil(total / limit), 1),
-    });
+    return res.json({ items, page, limit, total, totalPages: Math.max(Math.ceil(total / limit), 1) });
   } catch (e) {
     console.error("quotes list error:", e);
     return res.status(500).json({ message: "Server error" });
@@ -85,9 +70,8 @@ router.get("/", requireAuth, async (req, res) => {
 // GET /api/quotes/:id
 router.get("/:id", requireAuth, async (req, res) => {
   try {
-    if (!requireValidObjectId(req.params.id)) {
-      return res.status(400).json({ message: "Invalid quote id" });
-    }
+    if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid quote id" });
+
     const orgId = req.user.orgId;
     const quote = await Quote.findOne({ _id: req.params.id, orgId });
     if (!quote) return res.status(404).json({ message: "Quote not found" });
@@ -101,16 +85,14 @@ router.get("/:id", requireAuth, async (req, res) => {
 // GET /api/quotes/:id/pdf
 router.get("/:id/pdf", requireAuth, async (req, res) => {
   try {
-    if (!requireValidObjectId(req.params.id)) {
-      return res.status(400).json({ message: "Invalid quote id" });
-    }
+    if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid quote id" });
 
     const orgId = req.user.orgId;
     const quote = await Quote.findOne({ _id: req.params.id, orgId });
     if (!quote) return res.status(404).json({ message: "Quote not found" });
 
-    // Optional: include org branding later (logo, address, etc.)
-    return renderQuotePdf(res, quote, null);
+    const org = await Org.findById(orgId).select("name orgName");
+    return streamQuotePdf(res, { quote, org });
   } catch (e) {
     console.error("quote pdf error:", e);
     return res.status(500).json({ message: "Server error" });
@@ -121,7 +103,6 @@ router.get("/:id/pdf", requireAuth, async (req, res) => {
 router.post("/", requireAuth, async (req, res) => {
   try {
     const orgId = req.user.orgId;
-
     const org = await Org.findById(orgId).select("taxRate");
     const orgTaxRate = org?.taxRate ?? 0.1;
 
@@ -140,10 +121,7 @@ router.post("/", requireAuth, async (req, res) => {
     const safePricingMode = pricingMode === "inclusive" ? "inclusive" : "exclusive";
     const safeStatus = ["draft", "sent", "accepted", "declined"].includes(status) ? status : "draft";
 
-    const { computedLines, subtotalExTax, taxTotal, totalIncTax } = computeQuoteTotals({
-      lines,
-      orgTaxRate,
-    });
+    const { computedLines, subtotalExTax, taxTotal, totalIncTax } = computeQuoteTotals({ lines, orgTaxRate });
 
     let quoteNumber = generateQuoteNumber();
     for (let i = 0; i < 3; i++) {
@@ -153,12 +131,7 @@ router.post("/", requireAuth, async (req, res) => {
       quoteNumber = generateQuoteNumber();
     }
 
-    let finalCustomerSnapshot = {
-      name: "",
-      email: "",
-      phone: "",
-      address: "",
-    };
+    let finalCustomerSnapshot = { name: "", email: "", phone: "", address: "" };
 
     if (customerSnapshot && typeof customerSnapshot === "object") {
       finalCustomerSnapshot = {
@@ -172,12 +145,7 @@ router.post("/", requireAuth, async (req, res) => {
       if (c) {
         const a = c.address || {};
         const address = [a.line1, a.line2, a.suburb, a.state, a.postcode, a.country].filter(Boolean).join(", ");
-        finalCustomerSnapshot = {
-          name: c.name || "",
-          email: c.email || "",
-          phone: c.phone || "",
-          address,
-        };
+        finalCustomerSnapshot = { name: c.name || "", email: c.email || "", phone: c.phone || "", address };
       }
     }
 
@@ -186,24 +154,17 @@ router.post("/", requireAuth, async (req, res) => {
       createdBy: req.user.id,
       quoteNumber,
       status: safeStatus,
-
       customerId: customerId || null,
       customerSnapshot: finalCustomerSnapshot,
-
       title: String(title || ""),
       notes: String(notes || ""),
-
       pricingMode: safePricingMode,
       lines: computedLines,
-
       subtotalExTax,
       taxTotal,
       totalIncTax,
-
       issueDate: issueDate ? new Date(issueDate) : new Date(),
       validUntil: validUntil ? new Date(validUntil) : null,
-
-      // lifecycle fields default null; statusHistory default []
     });
 
     return res.status(201).json({ quote: created });
@@ -219,13 +180,13 @@ router.post("/:id/send", requireAuth, async (req, res) => {
     if (!requireValidObjectId(req.params.id)) {
       return res.status(400).json({ message: "Invalid quote id" });
     }
+
     const orgId = req.user.orgId;
     const userId = req.user.id;
 
     const quote = await Quote.findOne({ _id: req.params.id, orgId });
     if (!quote) return res.status(404).json({ message: "Quote not found" });
 
-    // If already accepted/declined, we won't move it back to sent.
     if (quote.status === "accepted") {
       return res.status(409).json({ message: "Quote has been accepted and is locked" });
     }
@@ -235,20 +196,15 @@ router.post("/:id/send", requireAuth, async (req, res) => {
 
     const now = new Date();
 
-    // Mint public token if missing (unguessable)
     if (!quote.publicToken) {
-      // extremely unlikely collision; retry a few times if unique index conflicts on save
       quote.publicToken = generatePublicToken();
       quote.publicTokenCreatedAt = now;
 
-      // Optional: set expiry based on validUntil if present (nice default)
-      // If you'd rather not tie it, just leave it null.
       if (quote.validUntil instanceof Date && !Number.isNaN(quote.validUntil.getTime())) {
         quote.publicTokenExpiresAt = quote.validUntil;
       }
     }
 
-    // Idempotency: if already sent, don't add duplicate history entries
     if (quote.status !== "sent") {
       quote.statusHistory.push({
         from: quote.status,
@@ -266,7 +222,6 @@ router.post("/:id/send", requireAuth, async (req, res) => {
     await quote.save();
     return res.json({ quote });
   } catch (e) {
-    // Handle rare unique token collision
     if (e && e.code === 11000 && String(e.message || "").includes("publicToken")) {
       return res.status(503).json({ message: "Token collision, please retry" });
     }
@@ -284,18 +239,18 @@ router.post("/:id/email", requireAuth, async (req, res) => {
     }
 
     const orgId = req.user.orgId;
+
     const quote = await Quote.findOne({ _id: req.params.id, orgId });
     if (!quote) return res.status(404).json({ message: "Quote not found" });
 
-    const to =
-      String(req.body?.to || quote.customerSnapshot?.email || "").trim();
+    const to = String(req.body?.to || quote.customerSnapshot?.email || "").trim();
+    if (!to) return res.status(400).json({ message: "Customer email is missing" });
 
-    if (!to) {
-      return res.status(400).json({ message: "Customer email is missing" });
-    }
-
+    // Require public token link (so user can view/accept)
     if (!quote.publicToken) {
-      return res.status(409).json({ message: "Quote must be sent before emailing (no public link yet)" });
+      return res
+        .status(409)
+        .json({ message: "Quote must be sent before emailing (no public link yet)" });
     }
 
     const publicUrl = `${process.env.FRONTEND_URL}/quote/view/${quote.publicToken}`;
@@ -321,33 +276,8 @@ router.post("/:id/email", requireAuth, async (req, res) => {
     const attachments = [];
 
     if (attachPdf) {
-      // Build PDF in-memory buffer (simple approach)
-      const chunks = [];
-      const streamRes = {
-        setHeader() {},
-        pipe() {},
-      };
-
-      // Create a doc separately so we can buffer
-      const PDFDocument = require("pdfkit");
-      const doc = new PDFDocument({ size: "A4", margin: 50 });
-      doc.on("data", (d) => chunks.push(d));
-      const pdfDone = new Promise((resolve) => doc.on("end", resolve));
-
-      // Render minimal copy of renderQuotePdf (buffer version)
-      // To keep this clean, we’ll reuse the same layout logic but in buffer mode:
-      // easiest: call a dedicated buffer generator later. For now, create a basic PDF quickly.
-      doc.fontSize(18).text(orgId ? "Quote" : "Quote").moveDown(0.5);
-      doc.fontSize(12).text(`Quote #: ${quote.quoteNumber}`);
-      doc.text(`Status: ${quote.status}`);
-      doc.moveDown(0.5);
-      doc.text(`Total (inc GST): $${Number(quote.totalIncTax || 0).toFixed(2)}`);
-      doc.moveDown(0.5);
-      doc.text(`Public link: ${publicUrl}`);
-      doc.end();
-
-      await pdfDone;
-      const pdfBuffer = Buffer.concat(chunks);
+      const org = await Org.findById(orgId).select("name orgName");
+      const pdfBuffer = await renderQuotePdf({ quote, org });
 
       attachments.push({
         filename: `${quote.quoteNumber}.pdf`,
@@ -355,13 +285,7 @@ router.post("/:id/email", requireAuth, async (req, res) => {
       });
     }
 
-    await sendQuoteEmail({
-      to,
-      subject,
-      text,
-      html,
-      attachments,
-    });
+    await sendQuoteEmail({ to, subject, text, html, attachments });
 
     return res.json({ ok: true });
   } catch (e) {
@@ -370,36 +294,26 @@ router.post("/:id/email", requireAuth, async (req, res) => {
   }
 });
 
-// PATCH /api/quotes/:id  (no status changes here; enforce lock)
+// PATCH /api/quotes/:id
 router.patch("/:id", requireAuth, async (req, res) => {
   try {
-    if (!requireValidObjectId(req.params.id)) {
-      return res.status(400).json({ message: "Invalid quote id" });
-    }
+    if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid quote id" });
 
     const orgId = req.user.orgId;
     const quote = await Quote.findOne({ _id: req.params.id, orgId });
     if (!quote) return res.status(404).json({ message: "Quote not found" });
 
-    if (isLocked(quote)) {
-      return res.status(409).json({ message: "Quote is locked and cannot be edited" });
-    }
+    if (isLocked(quote)) return res.status(409).json({ message: "Quote is locked and cannot be edited" });
 
     const org = await Org.findById(orgId).select("taxRate");
     const orgTaxRate = org?.taxRate ?? 0.1;
 
     const updates = req.body || {};
-
     const allowed = {};
+
     if (typeof updates.title === "string") allowed.title = updates.title;
     if (typeof updates.notes === "string") allowed.notes = updates.notes;
-
-    if (updates.pricingMode === "exclusive" || updates.pricingMode === "inclusive") {
-      allowed.pricingMode = updates.pricingMode;
-    }
-
-    // IMPORTANT: status transitions are not allowed via PATCH anymore.
-    // They must go through dedicated endpoints (send/accept/decline).
+    if (updates.pricingMode === "exclusive" || updates.pricingMode === "inclusive") allowed.pricingMode = updates.pricingMode;
 
     if (updates.customerId !== undefined) allowed.customerId = updates.customerId || null;
     if (updates.customerSnapshot && typeof updates.customerSnapshot === "object") {
@@ -415,10 +329,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
     if (updates.validUntil !== undefined) allowed.validUntil = updates.validUntil ? new Date(updates.validUntil) : null;
 
     if (Array.isArray(updates.lines)) {
-      const { computedLines, subtotalExTax, taxTotal, totalIncTax } = computeQuoteTotals({
-        lines: updates.lines,
-        orgTaxRate,
-      });
+      const { computedLines, subtotalExTax, taxTotal, totalIncTax } = computeQuoteTotals({ lines: updates.lines, orgTaxRate });
       allowed.lines = computedLines;
       allowed.subtotalExTax = subtotalExTax;
       allowed.taxTotal = taxTotal;
@@ -438,9 +349,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
 // DELETE /api/quotes/:id
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
-    if (!requireValidObjectId(req.params.id)) {
-      return res.status(400).json({ message: "Invalid quote id" });
-    }
+    if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid quote id" });
 
     const orgId = req.user.orgId;
     const deleted = await Quote.findOneAndDelete({ _id: req.params.id, orgId });
