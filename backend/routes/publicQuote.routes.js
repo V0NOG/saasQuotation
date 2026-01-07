@@ -2,7 +2,7 @@
 const express = require("express");
 const Quote = require("../models/Quote");
 const Org = require("../models/Org");
-const { renderQuotePdf } = require("../utils/quotePdf");
+const { streamQuotePdf } = require("../utils/quotePdf");
 
 const router = express.Router();
 
@@ -45,17 +45,8 @@ router.get("/quotes/:token/pdf", async (req, res) => {
     if (!quote) return res.status(404).json({ message: "Quote not found" });
     if (isTokenExpired(quote)) return res.status(410).json({ message: "Quote link expired" });
 
-    const org = quote.orgId
-      ? await Org.findById(quote.orgId).select("name orgName")
-      : null;
-
-    const pdfBuffer = await renderQuotePdf({ quote, org });
-
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="${quote.quoteNumber}.pdf"`);
-    res.setHeader("Content-Length", String(pdfBuffer.length));
-
-    return res.status(200).send(pdfBuffer);
+    const org = quote.orgId ? await Org.findById(quote.orgId).select("name orgName") : null;
+    return streamQuotePdf(res, { quote, org, disposition: "inline" });
   } catch (e) {
     console.error("public quote pdf error:", e);
     return res.status(500).json({ message: "Server error" });
@@ -80,7 +71,7 @@ router.post("/quotes/:token/accept", async (req, res) => {
 
     const now = new Date();
     const ip = clientIp(req);
-    const ua = String(req.headers["user-agent"] || "");
+    const ua = String(req.headers["user-agent"] || "").slice(0, 300);
 
     quote.statusHistory.push({
       from: quote.status,
@@ -121,7 +112,7 @@ router.post("/quotes/:token/decline", async (req, res) => {
 
     const now = new Date();
     const ip = clientIp(req);
-    const ua = String(req.headers["user-agent"] || "");
+    const ua = String(req.headers["user-agent"] || "").slice(0, 300);
 
     quote.statusHistory.push({
       from: quote.status,

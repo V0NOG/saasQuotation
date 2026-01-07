@@ -92,7 +92,7 @@ router.get("/:id/pdf", requireAuth, async (req, res) => {
     if (!quote) return res.status(404).json({ message: "Quote not found" });
 
     const org = await Org.findById(orgId).select("name orgName");
-    return streamQuotePdf(res, { quote, org });
+    return streamQuotePdf(res, { quote, org, disposition: "inline" });
   } catch (e) {
     console.error("quote pdf error:", e);
     return res.status(500).json({ message: "Server error" });
@@ -174,12 +174,10 @@ router.post("/", requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/quotes/:id/send  (auth, org-scoped, idempotent)
+// POST /api/quotes/:id/send (auth, org-scoped, idempotent-ish)
 router.post("/:id/send", requireAuth, async (req, res) => {
   try {
-    if (!requireValidObjectId(req.params.id)) {
-      return res.status(400).json({ message: "Invalid quote id" });
-    }
+    if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid quote id" });
 
     const orgId = req.user.orgId;
     const userId = req.user.id;
@@ -187,12 +185,8 @@ router.post("/:id/send", requireAuth, async (req, res) => {
     const quote = await Quote.findOne({ _id: req.params.id, orgId });
     if (!quote) return res.status(404).json({ message: "Quote not found" });
 
-    if (quote.status === "accepted") {
-      return res.status(409).json({ message: "Quote has been accepted and is locked" });
-    }
-    if (quote.status === "declined") {
-      return res.status(409).json({ message: "Quote has been declined" });
-    }
+    if (quote.status === "accepted") return res.status(409).json({ message: "Quote has been accepted and is locked" });
+    if (quote.status === "declined") return res.status(409).json({ message: "Quote has been declined" });
 
     const now = new Date();
 
@@ -232,13 +226,13 @@ router.post("/:id/send", requireAuth, async (req, res) => {
 
 // POST /api/quotes/:id/email
 // body: { to?: string, message?: string, attachPdf?: boolean }
+// Idempotency via header: Idempotency-Key
 router.post("/:id/email", requireAuth, async (req, res) => {
   try {
-    if (!requireValidObjectId(req.params.id)) {
-      return res.status(400).json({ message: "Invalid quote id" });
-    }
+    if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid quote id" });
 
     const orgId = req.user.orgId;
+    const userId = req.user.id;
 
     const quote = await Quote.findOne({ _id: req.params.id, orgId });
     if (!quote) return res.status(404).json({ message: "Quote not found" });
@@ -246,11 +240,19 @@ router.post("/:id/email", requireAuth, async (req, res) => {
     const to = String(req.body?.to || quote.customerSnapshot?.email || "").trim();
     if (!to) return res.status(400).json({ message: "Customer email is missing" });
 
-    // Require public token link (so user can view/accept)
+    // Require public token link
+    // If missing but status isn't sent, enforce workflow.
     if (!quote.publicToken) {
-      return res
-        .status(409)
-        .json({ message: "Quote must be sent before emailing (no public link yet)" });
+      return res.status(409).json({ message: "Quote must be sent before emailing (no public link yet)" });
+    }
+
+    const idemKey = String(req.headers["idempotency-key"] || "").trim();
+    if (!idemKey) return res.status(400).json({ message: "Missing Idempotency-Key header" });
+
+    // Idempotency check
+    const already = (quote.emailHistory || []).find((h) => h && h.key === idemKey);
+    if (already) {
+      return res.json({ ok: true, duplicate: true, messageId: already.messageId || "" });
     }
 
     const publicUrl = `${process.env.FRONTEND_URL}/quote/view/${quote.publicToken}`;
@@ -278,16 +280,30 @@ router.post("/:id/email", requireAuth, async (req, res) => {
     if (attachPdf) {
       const org = await Org.findById(orgId).select("name orgName");
       const pdfBuffer = await renderQuotePdf({ quote, org });
-
       attachments.push({
         filename: `${quote.quoteNumber}.pdf`,
         content: pdfBuffer,
       });
     }
 
-    await sendQuoteEmail({ to, subject, text, html, attachments });
+    const info = await sendQuoteEmail({ to, subject, text, html, attachments });
 
-    return res.json({ ok: true });
+    const rawMessageId = String(info?.messageId || "");
+    const safeMessageId = rawMessageId.replace(/[\r\n]/g, "").slice(0, 200);
+
+    quote.emailHistory.push({
+      key: idemKey,
+      to,
+      subject,
+      pdfAttached: !!attachPdf,
+      sentAt: new Date(),
+      actorUserId: userId,
+      messageId: safeMessageId,
+    });
+
+    await quote.save();
+
+    return res.json({ ok: true, messageId: safeMessageId });
   } catch (e) {
     console.error("quote email error:", e);
     return res.status(500).json({ message: "Server error" });
@@ -352,6 +368,13 @@ router.delete("/:id", requireAuth, async (req, res) => {
     if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid quote id" });
 
     const orgId = req.user.orgId;
+
+    // Optional: keep delete allowed even if accepted, but most SaaS prevents it.
+    // If you want strictness, uncomment:
+    // const q = await Quote.findOne({ _id: req.params.id, orgId }).select("status lockedAt");
+    // if (!q) return res.status(404).json({ message: "Quote not found" });
+    // if (isLocked(q)) return res.status(409).json({ message: "Quote is locked and cannot be deleted" });
+
     const deleted = await Quote.findOneAndDelete({ _id: req.params.id, orgId });
     if (!deleted) return res.status(404).json({ message: "Quote not found" });
 

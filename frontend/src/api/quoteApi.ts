@@ -26,7 +26,6 @@ export type Quote = {
   quoteNumber: string;
   status: QuoteStatus;
 
-  // lifecycle fields
   publicToken?: string | null;
   publicTokenExpiresAt?: string | null;
   sentAt?: string | null;
@@ -64,8 +63,24 @@ export type QuoteListResponse = {
   totalPages: number;
 };
 
-// Public view payload (your backend returns { quote })
 export type PublicQuoteResponse = { quote: Quote };
+
+export type EmailQuotePayload = {
+  to?: string;
+  message?: string;
+  attachPdf?: boolean;
+};
+
+export type EmailQuoteResponse = {
+  ok: boolean;
+  duplicate?: boolean;
+  messageId?: string;
+};
+
+function makeIdempotencyKey(prefix: string, id: string) {
+  // good enough for UI (unique-ish per click)
+  return `${prefix}-${id}-${Date.now()}`;
+}
 
 export const quoteApi = {
   async list(params: { search?: string; status?: QuoteStatus | ""; page?: number; limit?: number }) {
@@ -93,18 +108,23 @@ export const quoteApi = {
     return data.ok;
   },
 
-  async email(id: string, payload?: { to?: string; message?: string; attachPdf?: boolean }) {
-    const { data } = await http.post<{ ok: boolean }>(`/quotes/${id}/email`, payload || {});
-    return data.ok;
+  async email(id: string, payload?: EmailQuotePayload, opts?: { idempotencyKey?: string }) {
+    const idempotencyKey = opts?.idempotencyKey || makeIdempotencyKey("quote-email", id);
+
+    const { data } = await http.post<EmailQuoteResponse>(
+      `/quotes/${id}/email`,
+      payload || {},
+      { headers: { "Idempotency-Key": idempotencyKey } }
+    );
+
+    return data;
   },
 
-  // ✅ Phase 5 lifecycle
   async send(id: string) {
     const { data } = await http.post<{ quote: Quote }>(`/quotes/${id}/send`);
     return data.quote;
   },
 
-  // ✅ Public view + actions
   async getPublic(token: string) {
     const { data } = await http.get<PublicQuoteResponse>(`/public/quotes/${token}`);
     return data.quote;

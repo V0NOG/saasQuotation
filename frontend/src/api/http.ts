@@ -1,12 +1,15 @@
-// src/api/http.ts
+// frontend/src/api/http.ts
 import axios from "axios";
 
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:5050";
+
 export const http = axios.create({
-  baseURL: `${import.meta.env.VITE_API_BASE_URL}/api`,
+  baseURL: `${API_BASE}/api`,
   withCredentials: true, // important for refresh cookie
 });
 
-const TOKEN_KEY = "userToken"; // ✅ unify (OAuthCallBack uses this)
+const TOKEN_KEY = "userToken"; // ✅ single source of truth for the app
 
 let accessToken: string | null = localStorage.getItem(TOKEN_KEY);
 
@@ -16,7 +19,6 @@ export function setAccessToken(token: string | null) {
   if (token) localStorage.setItem(TOKEN_KEY, token);
   else localStorage.removeItem(TOKEN_KEY);
 
-  // ✅ let UI know auth changed
   window.dispatchEvent(new Event("auth:changed"));
 }
 

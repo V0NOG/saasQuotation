@@ -43,6 +43,7 @@ export default function QuoteEditor() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
 
   const [quoteId, setQuoteId] = useState<string | null>(isNew ? null : (id as string));
   const [publicToken, setPublicToken] = useState<string | null>(null);
@@ -209,9 +210,7 @@ export default function QuoteEditor() {
 
   function formatCustomerAddress(c: Customer) {
     const a = c.address || {};
-    return [a.line1, a.line2, a.suburb, a.state, a.postcode, a.country]
-      .filter(Boolean)
-      .join(", ");
+    return [a.line1, a.line2, a.suburb, a.state, a.postcode, a.country].filter(Boolean).join(", ");
   }
 
   async function save() {
@@ -222,7 +221,6 @@ export default function QuoteEditor() {
     setSaving(true);
     try {
       const payload = {
-        // status is NOT edited here; lifecycle endpoints handle it
         pricingMode,
         title,
         notes,
@@ -257,6 +255,44 @@ export default function QuoteEditor() {
       alert(e?.response?.data?.message || "Could not send quote.");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function emailQuote() {
+    if (!quoteId) return;
+    if (!publicToken) {
+      alert("Send the quote first to generate a public link before emailing.");
+      return;
+    }
+
+    setEmailSending(true);
+    try {
+      const to = (customerSnapshot.email || "").trim();
+
+      // If you want backend to auto-use customerSnapshot.email, you can omit `to` when blank.
+      const res: any = await quoteApi.email(quoteId, {
+        to: to || undefined,
+        message: "Please review and accept the quote.",
+        attachPdf: true,
+      });
+
+      // Support both shapes:
+      // - old: boolean
+      // - new: { ok, duplicate?, messageId? }
+      if (typeof res === "boolean") {
+        alert(res ? "Email sent!" : "Could not send email.");
+        return;
+      }
+
+      if (res.duplicate) {
+        alert("Email already sent (duplicate request blocked).");
+      } else {
+        alert(`Email sent!${res.messageId ? `\nMessageId: ${res.messageId}` : ""}`);
+      }
+    } catch (e: any) {
+      alert(e?.response?.data?.message || "Could not send email.");
+    } finally {
+      setEmailSending(false);
     }
   }
 
@@ -312,40 +348,17 @@ export default function QuoteEditor() {
             </div>
 
             {!isNew && quoteId ? (
+              <div className="mt-3 flex flex-wrap gap-2">
                 <Button variant="outline" onClick={() => downloadQuotePdf(quoteId)}>
-                    Download PDF
+                  Download PDF
                 </Button>
-            ) : null}
 
-            {!isNew && quoteId && publicToken ? (
-                <Button
-                    variant="outline"
-                    onClick={async () => {
-                    try {
-                        await quoteApi.update(quoteId, {} as any); // noop if you want; optional
-                        // call email endpoint via http directly (since quoteApi doesn’t have it yet)
-                        // easiest: add quoteApi.email() next (below)
-                    } catch {}
-                    }}
-                >
-                    Email Quote
-                </Button>
-            ) : null}
-
-            {!isNew && quoteId && publicToken ? (
-                <Button
-                    variant="outline"
-                    onClick={async () => {
-                    try {
-                        await quoteApi.email(quoteId, { attachPdf: true });
-                        alert("Email sent!");
-                    } catch (e: any) {
-                        alert(e?.response?.data?.message || "Could not send email.");
-                    }
-                    }}
-                >
-                    Email Quote
-                </Button>
+                {publicToken ? (
+                  <Button variant="outline" disabled={emailSending} onClick={emailQuote}>
+                    {emailSending ? "Emailing..." : "Email Quote"}
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
 
             {publicUrl ? (
@@ -402,9 +415,7 @@ export default function QuoteEditor() {
                           className="w-full rounded-lg px-3 py-2 text-left hover:bg-gray-50 disabled:opacity-60 dark:hover:bg-gray-800"
                         >
                           <div className="text-sm font-semibold text-gray-900 dark:text-white">{c.name}</div>
-                          <div className="text-xs text-gray-500">
-                            {[c.email, c.phone].filter(Boolean).join(" • ") || "—"}
-                          </div>
+                          <div className="text-xs text-gray-500">{[c.email, c.phone].filter(Boolean).join(" • ") || "—"}</div>
                         </button>
                       ))}
                     </div>
@@ -459,9 +470,7 @@ export default function QuoteEditor() {
             {loading ? (
               <div className="mt-4 text-sm text-gray-600 dark:text-gray-300">Loading…</div>
             ) : lines.length === 0 ? (
-              <div className="mt-4 text-sm text-gray-600 dark:text-gray-300">
-                No line items yet. Add from the Pricebook on the right.
-              </div>
+              <div className="mt-4 text-sm text-gray-600 dark:text-gray-300">No line items yet. Add from the Pricebook on the right.</div>
             ) : (
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full table-auto">
@@ -481,28 +490,13 @@ export default function QuoteEditor() {
                           <div className="text-sm font-medium text-gray-900 dark:text-white">{l.name}</div>
                           {l.description ? <div className="text-xs text-gray-500">{l.description}</div> : null}
                           <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
-                            <Input
-                              value={l.name}
-                              disabled={isLocked}
-                              onChange={(e) => updateLine(idx, { name: e.target.value })}
-                              placeholder="Line name"
-                            />
-                            <Input
-                              value={l.description || ""}
-                              disabled={isLocked}
-                              onChange={(e) => updateLine(idx, { description: e.target.value })}
-                              placeholder="Description"
-                            />
+                            <Input value={l.name} disabled={isLocked} onChange={(e) => updateLine(idx, { name: e.target.value })} placeholder="Line name" />
+                            <Input value={l.description || ""} disabled={isLocked} onChange={(e) => updateLine(idx, { description: e.target.value })} placeholder="Description" />
                           </div>
                         </td>
 
                         <td className="px-3 py-3">
-                          <Input
-                            type="number"
-                            disabled={isLocked}
-                            value={String(l.quantity ?? 0)}
-                            onChange={(e) => updateLine(idx, { quantity: Number(e.target.value || 0) })}
-                          />
+                          <Input type="number" disabled={isLocked} value={String(l.quantity ?? 0)} onChange={(e) => updateLine(idx, { quantity: Number(e.target.value || 0) })} />
                         </td>
 
                         <td className="px-3 py-3">
@@ -517,20 +511,14 @@ export default function QuoteEditor() {
                               updateLine(idx, { unitPriceExTax: round2(ex) });
                             }}
                           />
-                          <div className="mt-1 text-[11px] text-gray-500">
-                            Stored ex GST: {round2(Number(l.unitPriceExTax || 0)).toFixed(2)}
-                          </div>
+                          <div className="mt-1 text-[11px] text-gray-500">Stored ex GST: {round2(Number(l.unitPriceExTax || 0)).toFixed(2)}</div>
                         </td>
 
                         <td className="px-3 py-3">
                           <Input
                             type="number"
                             disabled={isLocked}
-                            value={
-                              l.taxRate === null || l.taxRate === undefined
-                                ? ""
-                                : String(round2((l.taxRate as number) * 100))
-                            }
+                            value={l.taxRate === null || l.taxRate === undefined ? "" : String(round2((l.taxRate as number) * 100))}
                             onChange={(e) => {
                               const v = e.target.value;
                               if (v === "") return updateLine(idx, { taxRate: null });
@@ -590,9 +578,7 @@ export default function QuoteEditor() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="text-sm font-semibold text-gray-900 dark:text-white">{it.name}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300">
-                        {Number(it.unitPrice || 0).toFixed(2)}
-                      </div>
+                      <div className="text-sm text-gray-600 dark:text-gray-300">{Number(it.unitPrice || 0).toFixed(2)}</div>
                     </div>
                     {it.description ? <div className="mt-1 text-xs text-gray-500">{it.description}</div> : null}
                   </button>
@@ -616,9 +602,7 @@ export default function QuoteEditor() {
                 <span>Total (inc GST)</span>
                 <span>{preview.totalInc.toFixed(2)}</span>
               </div>
-              <div className="pt-2 text-xs text-gray-500">
-                Final totals are calculated server-side using your org’s tax rate.
-              </div>
+              <div className="pt-2 text-xs text-gray-500">Final totals are calculated server-side using your org’s tax rate.</div>
             </div>
           </div>
         </div>

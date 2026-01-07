@@ -1,6 +1,20 @@
 // backend/models/Quote.js
 const mongoose = require("mongoose");
 
+const QuoteEmailHistorySchema = new mongoose.Schema(
+  {
+    key: { type: String, required: true }, // idempotency key
+    to: { type: String, required: true },
+    subject: { type: String, default: "" },
+    pdfAttached: { type: Boolean, default: true },
+    sentAt: { type: Date, default: Date.now, required: true },
+
+    actorUserId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    messageId: { type: String, default: "" },
+  },
+  { _id: false }
+);
+
 const QuoteLineSchema = new mongoose.Schema(
   {
     // Reference to original pricebook item (optional snapshot safety)
@@ -96,6 +110,8 @@ const QuoteSchema = new mongoose.Schema(
 
     // Audit trail
     statusHistory: { type: [QuoteStatusHistorySchema], default: [] },
+
+    emailHistory: { type: [QuoteEmailHistorySchema], default: [] },
   },
   { timestamps: true }
 );
@@ -104,5 +120,7 @@ QuoteSchema.index({ orgId: 1, quoteNumber: 1 }, { unique: true });
 
 // If token exists, keep it unique. Sparse allows many nulls.
 QuoteSchema.index({ publicToken: 1 }, { unique: true, sparse: true });
+
+QuoteSchema.index({ _id: 1, "emailHistory.key": 1 });
 
 module.exports = mongoose.model("Quote", QuoteSchema);
