@@ -4,6 +4,7 @@ const Quote = require("../models/Quote");
 const Org = require("../models/Org");
 const { requireAuth } = require("../middleware/auth");
 const { computeQuoteTotals } = require("../utils/quoteMath");
+const Customer = require("../models/Customer");
 
 const router = express.Router();
 
@@ -91,7 +92,7 @@ router.post("/", requireAuth, async (req, res) => {
 
     const {
       customerId = null,
-      customerSnapshot = {},
+      customerSnapshot = null,
       title = "",
       notes = "",
       pricingMode = "exclusive",
@@ -118,6 +119,36 @@ router.post("/", requireAuth, async (req, res) => {
       quoteNumber = generateQuoteNumber();
     }
 
+    let finalCustomerSnapshot = {
+        name: "",
+        email: "",
+        phone: "",
+        address: "",
+    };
+
+    if (customerSnapshot && typeof customerSnapshot === "object") {
+        finalCustomerSnapshot = {
+            name: String(customerSnapshot?.name || ""),
+            email: String(customerSnapshot?.email || ""),
+            phone: String(customerSnapshot?.phone || ""),
+            address: String(customerSnapshot?.address || ""),
+        };
+    } else if (customerId) {
+    const c = await Customer.findOne({ _id: customerId, orgId }).select("name email phone address");
+        if (c) {
+            const a = c.address || {};
+            const address = [a.line1, a.line2, a.suburb, a.state, a.postcode, a.country]
+            .filter(Boolean)
+            .join(", ");
+            finalCustomerSnapshot = {
+            name: c.name || "",
+            email: c.email || "",
+            phone: c.phone || "",
+            address,
+            };
+        }
+    }
+
     const created = await Quote.create({
       orgId,
       createdBy: req.user.id,
@@ -125,12 +156,7 @@ router.post("/", requireAuth, async (req, res) => {
       status: safeStatus,
 
       customerId: customerId || null,
-      customerSnapshot: {
-        name: String(customerSnapshot?.name || ""),
-        email: String(customerSnapshot?.email || ""),
-        phone: String(customerSnapshot?.phone || ""),
-        address: String(customerSnapshot?.address || ""),
-      },
+      customerSnapshot: finalCustomerSnapshot,
 
       title: String(title || ""),
       notes: String(notes || ""),

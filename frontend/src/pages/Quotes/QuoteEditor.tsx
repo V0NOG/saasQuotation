@@ -5,7 +5,15 @@ import PageBreadCrumb from "../../components/common/PageBreadCrumb";
 import Button from "../../components/ui/button/Button";
 import Input from "../../components/form/input/InputField";
 
-import { quoteApi, type QuoteLine, type PricingMode, type QuoteStatus } from "../../api/quoteApi";
+// ✅ match your existing CustomersList pattern
+import { customersApi, type Customer } from "../../api/customersApi";
+
+import {
+  quoteApi,
+  type QuoteLine,
+  type PricingMode,
+  type QuoteStatus,
+} from "../../api/quoteApi";
 import { pricebookApi, type PriceItem } from "../../api/pricebookApi";
 
 function round2(n: number) {
@@ -15,8 +23,9 @@ function round2(n: number) {
 // UI helper: display unit price based on mode
 function displayUnitPrice(line: QuoteLine, mode: PricingMode, orgTaxRate = 0.1) {
   const rate = line.taxRate ?? orgTaxRate;
-  if (mode === "inclusive") return round2(line.unitPriceExTax * (1 + rate));
-  return round2(line.unitPriceExTax);
+  const ex = Number(line.unitPriceExTax || 0);
+  if (mode === "inclusive") return round2(ex * (1 + rate));
+  return round2(ex);
 }
 
 export default function QuoteEditor() {
@@ -38,11 +47,16 @@ export default function QuoteEditor() {
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Customer snapshot (Phase 4 we’ll build full customer picker; for now manual is fine)
-  const [customerName, setCustomerName] = useState("");
-  const [customerEmail, setCustomerEmail] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [customerAddress, setCustomerAddress] = useState("");
+  // Customer snapshot
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerResults, setCustomerResults] = useState<Customer[]>([]);
+  const [customerSnapshot, setCustomerSnapshot] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+  });
 
   // Lines
   const [lines, setLines] = useState<QuoteLine[]>([]);
@@ -52,43 +66,93 @@ export default function QuoteEditor() {
   const [pbSearch, setPbSearch] = useState("");
   const [pbItems, setPbItems] = useState<PriceItem[]>([]);
 
-  // Totals shown (server calculates final totals, but we show quick estimate)
-  const orgTaxRate = 0.1; // UI estimate; backend uses org taxRate. (Phase 4: fetch org tax rate in editor)
+  // Totals shown (server calculates final totals; UI preview only)
+  const orgTaxRate = 0.1;
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadQuote() {
       if (isNew) return;
       setLoading(true);
       try {
         const q = await quoteApi.getById(id!);
+        if (cancelled) return;
+
         setStatus(q.status);
         setPricingMode(q.pricingMode);
         setTitle(q.title || "");
         setNotes(q.notes || "");
 
-        setCustomerName(q.customerSnapshot?.name || "");
-        setCustomerEmail(q.customerSnapshot?.email || "");
-        setCustomerPhone(q.customerSnapshot?.phone || "");
-        setCustomerAddress(q.customerSnapshot?.address || "");
+        // if your API returns customerId, keep it; otherwise snapshot still works
+        setCustomerId((q as any).customerId || null);
+        setCustomerSnapshot({
+          name: q.customerSnapshot?.name || "",
+          email: q.customerSnapshot?.email || "",
+          phone: q.customerSnapshot?.phone || "",
+          address: q.customerSnapshot?.address || "",
+        });
 
         setLines(q.lines || []);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
+
     loadQuote();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+    return () => {
+      cancelled = true;
+    };
+  }, [id, isNew]);
 
   useEffect(() => {
-    let t: any;
-    async function loadPricebook() {
-      const res = await pricebookApi.list({ type: pbType, search: pbSearch, page: 1, limit: 10 });
-      setPbItems(res.items);
-    }
-    t = setTimeout(loadPricebook, 250);
-    return () => clearTimeout(t);
+    let cancelled = false;
+
+    const t = setTimeout(async () => {
+      try {
+        const res = await pricebookApi.list({
+          type: pbType,
+          search: pbSearch,
+          page: 1,
+          limit: 10,
+        });
+        if (cancelled) return;
+        setPbItems(res.items);
+      } catch {
+        if (!cancelled) setPbItems([]);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [pbType, pbSearch]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const t = setTimeout(async () => {
+      const q = customerSearch.trim();
+      if (!q) {
+        setCustomerResults([]);
+        return;
+      }
+
+      try {
+        const res = await customersApi.list({ search: q, page: 1, limit: 8 });
+        if (cancelled) return;
+        setCustomerResults(res.items);
+      } catch {
+        if (!cancelled) setCustomerResults([]);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [customerSearch]);
 
   function addFromPricebook(item: PriceItem) {
     const line: QuoteLine = {
@@ -116,16 +180,27 @@ export default function QuoteEditor() {
   function computePreviewTotals() {
     let subtotalEx = 0;
     let tax = 0;
+
     for (const l of lines) {
       const qty = Number(l.quantity || 0);
       const ex = Number(l.unitPriceExTax || 0);
       const rate = l.taxRate ?? orgTaxRate;
+
       const lineSub = round2(qty * ex);
       const lineTax = round2(lineSub * rate);
+
       subtotalEx = round2(subtotalEx + lineSub);
       tax = round2(tax + lineTax);
     }
+
     return { subtotalEx, tax, totalInc: round2(subtotalEx + tax) };
+  }
+
+  function formatCustomerAddress(c: Customer) {
+    const a = c.address || {};
+    return [a.line1, a.line2, a.suburb, a.state, a.postcode, a.country]
+      .filter(Boolean)
+      .join(", ");
   }
 
   async function save() {
@@ -136,12 +211,8 @@ export default function QuoteEditor() {
         pricingMode,
         title,
         notes,
-        customerSnapshot: {
-          name: customerName,
-          email: customerEmail,
-          phone: customerPhone,
-          address: customerAddress,
-        },
+        customerId,
+        customerSnapshot,
         lines,
       };
 
@@ -202,13 +273,80 @@ export default function QuoteEditor() {
 
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="md:col-span-2">
-                <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Quote title (optional)" />
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Quote title (optional)"
+                />
               </div>
 
-              <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Customer name" />
-              <Input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="Customer email" />
-              <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Customer phone" />
-              <Input value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} placeholder="Customer address" />
+              <div className="md:col-span-2">
+                <div className="flex flex-col gap-2">
+                  <div className="text-sm font-medium text-gray-900 dark:text-white">Customer</div>
+
+                  <Input
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    placeholder="Search customers by name/email/phone…"
+                  />
+
+                  {customerResults.length > 0 ? (
+                    <div className="rounded-xl border border-gray-200 bg-white p-2 dark:border-gray-800 dark:bg-gray-900">
+                      {customerResults.map((c) => (
+                        <button
+                          key={c._id}
+                          onClick={() => {
+                            setCustomerId(c._id);
+                            setCustomerSearch("");
+                            setCustomerResults([]);
+                            setCustomerSnapshot({
+                              name: c.name || "",
+                              email: c.email || "",
+                              phone: c.phone || "",
+                              address: formatCustomerAddress(c),
+                            });
+                          }}
+                          className="w-full rounded-lg px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800"
+                        >
+                          <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                            {c.name}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {[c.email, c.phone].filter(Boolean).join(" • ") || "—"}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {customerId ? (
+                    <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800/40">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                            {customerSnapshot.name || "Selected customer"}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {[customerSnapshot.email, customerSnapshot.phone].filter(Boolean).join(" • ")}
+                          </div>
+                          {customerSnapshot.address ? (
+                            <div className="mt-1 text-xs text-gray-500">{customerSnapshot.address}</div>
+                          ) : null}
+                        </div>
+                        <button
+                          onClick={() => {
+                            setCustomerId(null);
+                            setCustomerSnapshot({ name: "", email: "", phone: "", address: "" });
+                          }}
+                          className="rounded-lg px-3 py-1 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-gray-800"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
 
               <div className="md:col-span-2">
                 <textarea
@@ -267,13 +405,12 @@ export default function QuoteEditor() {
                         <td className="px-3 py-3">
                           <Input
                             type="number"
-                            value={String(l.quantity)}
+                            value={String(l.quantity ?? 0)}
                             onChange={(e) => updateLine(idx, { quantity: Number(e.target.value || 0) })}
                           />
                         </td>
 
                         <td className="px-3 py-3">
-                          {/* Store EX GST always. If pricingMode is inclusive, we show converted value but still store EX. */}
                           <Input
                             type="number"
                             value={String(displayUnitPrice(l, pricingMode, orgTaxRate))}
@@ -285,14 +422,18 @@ export default function QuoteEditor() {
                             }}
                           />
                           <div className="mt-1 text-[11px] text-gray-500">
-                            Stored ex GST: {round2(l.unitPriceExTax).toFixed(2)}
+                            Stored ex GST: {round2(Number(l.unitPriceExTax || 0)).toFixed(2)}
                           </div>
                         </td>
 
                         <td className="px-3 py-3">
                           <Input
                             type="number"
-                            value={l.taxRate === null || l.taxRate === undefined ? "" : String(round2((l.taxRate as number) * 100))}
+                            value={
+                              l.taxRate === null || l.taxRate === undefined
+                                ? ""
+                                : String(round2((l.taxRate as number) * 100))
+                            }
                             onChange={(e) => {
                               const v = e.target.value;
                               if (v === "") return updateLine(idx, { taxRate: null });
@@ -350,7 +491,9 @@ export default function QuoteEditor() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="text-sm font-semibold text-gray-900 dark:text-white">{it.name}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300">{Number(it.unitPrice).toFixed(2)}</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-300">
+                        {Number(it.unitPrice || 0).toFixed(2)}
+                      </div>
                     </div>
                     {it.description ? <div className="mt-1 text-xs text-gray-500">{it.description}</div> : null}
                   </button>

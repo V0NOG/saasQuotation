@@ -9,6 +9,7 @@ import CustomerModal from "./CustomerModal";
 export default function CustomersList() {
   const [items, setItems] = useState<Customer[]>([]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const limit = 10;
 
@@ -20,10 +21,10 @@ export default function CustomersList() {
 
   const title = useMemo(() => [{ label: "Customers" }], []);
 
-  async function load() {
+  async function load(p = page, s = debouncedSearch) {
     setLoading(true);
     try {
-      const res = await customersApi.list({ search, page, limit });
+      const res = await customersApi.list({ search: s, page: p, limit });
       setItems(res.items);
       setTotalPages(res.totalPages);
     } finally {
@@ -31,21 +32,20 @@ export default function CustomersList() {
     }
   }
 
-  // reload on page changes
+  // Debounce search input -> debouncedSearch
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Reload when page OR debounced search changes
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
-
-  // debounce search
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setPage(1);
-      load();
-    }, 300);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [page, debouncedSearch]);
 
   function openCreate() {
     setEditing(null);
@@ -57,13 +57,20 @@ export default function CustomersList() {
     setModalOpen(true);
   }
 
+  function closeModal() {
+    setModalOpen(false);
+    setEditing(null);
+  }
+
   async function handleSave(payload: any) {
     if (editing?._id) {
       await customersApi.update(editing._id, payload);
     } else {
       await customersApi.create(payload);
     }
-    await load();
+
+    closeModal();
+    await load(1, debouncedSearch); // ensure the list refreshes predictably
   }
 
   async function handleDelete(c: Customer) {
@@ -71,7 +78,14 @@ export default function CustomersList() {
     if (!ok) return;
 
     await customersApi.remove(c._id);
-    await load();
+
+    // If they deleted the one currently being edited, close modal safely
+    if (editing?._id === c._id) closeModal();
+
+    // Keep page in range if we deleted last item on last page
+    const nextPage = page > 1 && items.length === 1 ? page - 1 : page;
+    setPage(nextPage);
+    await load(nextPage, debouncedSearch);
   }
 
   return (
@@ -121,9 +135,15 @@ export default function CustomersList() {
               ) : (
                 items.map((c) => (
                   <tr key={c._id} className="border-b border-gray-100 dark:border-gray-800">
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">{c.name}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{c.email || "—"}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{c.phone || "—"}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                      {c.name}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                      {c.email || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                      {c.phone || "—"}
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
                       {c.address?.suburb || "—"}
                     </td>
@@ -157,7 +177,11 @@ export default function CustomersList() {
           </p>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" disabled={page <= 1} onClick={() => setPage((p) => Math.max(p - 1, 1))}>
+            <Button
+              variant="outline"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(p - 1, 1))}
+            >
               Prev
             </Button>
             <Button
@@ -173,7 +197,7 @@ export default function CustomersList() {
 
       <CustomerModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={closeModal}
         onSave={handleSave}
         initial={editing}
       />

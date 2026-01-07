@@ -6,7 +6,6 @@ export type Customer = {
   name: string;
   email?: string;
   phone?: string;
-  notes?: string;
   address?: {
     line1?: string;
     line2?: string;
@@ -15,11 +14,13 @@ export type Customer = {
     postcode?: string;
     country?: string;
   };
+  notes?: string;
+  tags?: string[];
   createdAt?: string;
   updatedAt?: string;
 };
 
-export type CustomersListResponse = {
+export type CustomerListResponse = {
   items: Customer[];
   page: number;
   limit: number;
@@ -29,11 +30,16 @@ export type CustomersListResponse = {
 
 export const customersApi = {
   async list(params: { search?: string; page?: number; limit?: number }) {
-    const { data } = await http.get<CustomersListResponse>("/customers", { params });
+    const { data } = await http.get<CustomerListResponse>("/customers", { params });
     return data;
   },
 
-  async create(payload: Partial<Customer> & { name: string }) {
+  async getById(id: string) {
+    const { data } = await http.get<{ customer: Customer }>(`/customers/${id}`);
+    return data.customer;
+  },
+
+  async create(payload: Partial<Customer>) {
     const { data } = await http.post<{ customer: Customer }>("/customers", payload);
     return data.customer;
   },
