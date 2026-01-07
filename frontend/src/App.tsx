@@ -91,6 +91,12 @@ import ImageGeneratorPage from "./pages/Ai/ImageGenerator";
 import CodeGeneratorPage from "./pages/Ai/CodeGenerator";
 import VideoGeneratorPage from "./pages/Ai/VideoGenerator";
 
+import CustomersList from "./pages/Customers/CustomersList";
+import Services from "./pages/Pricebook/Services";
+import Materials from "./pages/Pricebook/Materials";
+import QuotesList from "./pages/Quotes/QuotesList";
+import QuoteEditor from "./pages/Quotes/QuoteEditor";
+
 export default function App() {
   return (
     <Router>
@@ -128,6 +134,12 @@ export default function App() {
           }
         >
           <Route index element={<Ecommerce />} />
+          <Route path="/customers" element={<CustomersList />} />
+          <Route path="/pricebook/services" element={<Services />} />
+          <Route path="/pricebook/materials" element={<Materials />} />
+          <Route path="/quotes" element={<QuotesList />} />
+          <Route path="/quotes/new" element={<QuoteEditor />} />
+          <Route path="/quotes/:id" element={<QuoteEditor />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/marketing" element={<Marketing />} />
           <Route path="/crm" element={<Crm />} />

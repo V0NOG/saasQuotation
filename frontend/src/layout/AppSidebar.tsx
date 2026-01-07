@@ -47,6 +47,24 @@ const navItems: NavItem[] = [
     ],
   },
   {
+    icon: <UserCircleIcon />,
+    name: "Customers",
+    path: "/customers",
+  },
+  {
+    name: "Pricebook",
+    icon: <CartIcon />,
+    subItems: [
+      { name: "Services", path: "/pricebook/services" },
+      { name: "Materials", path: "/pricebook/materials" },
+    ],
+  },
+  {
+    name: "Quotes",
+    icon: <TableIcon />,
+    path: "/quotes",
+  },
+  {
     name: "AI Assistant",
     icon: <AiIcon />,
     new: true,

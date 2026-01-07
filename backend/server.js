@@ -13,6 +13,9 @@ require("./config/passport");
 const authRoutes = require("./routes/auth.routes");
 const googleAuthRoutes = require("./routes/auth.google");
 const orgRoutes = require("./routes/org.routes");
+const customerRoutes = require("./routes/customer.routes");
+const pricebookRoutes = require("./routes/pricebook.routes");
+const quoteRoutes = require("./routes/quote.routes");
 
 const app = express();
 
@@ -35,6 +38,9 @@ app.get("/health", (req, res) => res.json({ ok: true }));
 app.use("/api/auth", authRoutes);
 app.use("/api/auth", googleAuthRoutes);
 app.use("/api/org", orgRoutes);
+app.use("/api/customers", customerRoutes);
+app.use("/api/pricebook", pricebookRoutes);
+app.use("/api/quotes", quoteRoutes);
 app.use("/api/users", require("./routes/user.routes"));
 app.use("/api/user", userRoutes);
 
