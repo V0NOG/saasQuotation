@@ -7,6 +7,8 @@ const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
 const passport = require("passport");
 const userRoutes = require("./routes/user.routes");
+const billingRoutes = require("./routes/billing.routes");
+const stripeWebhookRoutes = require("./routes/stripe.webhook");
 
 const { connectDB } = require("./config/db");
 require("./config/passport");
@@ -29,6 +31,7 @@ if (process.env.NODE_ENV === "production") {
 
 app.use(helmet());
 app.use(morgan("dev"));
+app.use("/api/webhooks", express.raw({ type: "application/json" }), stripeWebhookRoutes);
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
 
@@ -64,6 +67,7 @@ app.use("/api/org", orgRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/pricebook", pricebookRoutes);
 app.use("/api/quotes", quoteRoutes);
+app.use("/api/billing", billingRoutes);
 
 // ✅ Public routes (add lightweight rate limit just for public endpoints)
 function createRateLimiter({ windowMs, max, keyFn }) {

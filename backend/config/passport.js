@@ -28,8 +28,11 @@ passport.use(
 
         // 3) If still not found, create a new Org + User (owner)
         if (!user) {
+          const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days
+
           const org = await Org.create({
-            name: `${firstName || "New"} ${lastName || "Company"}`
+            name: `${firstName || "New"} ${lastName || "Company"}`,
+            billing: { plan: "starter", status: "trialing", trialEndsAt },
           });
 
           user = await User.create({

@@ -27,6 +27,21 @@ export const authApi = {
     return data;
   },
 
+  async billingMe() {
+    const { data } = await http.get<{ billing: any; org: any }>("/org/billing");
+    return data;
+  },
+
+  async createCheckoutSession(plan: "starter" | "pro") {
+    const { data } = await http.post<{ url: string }>("/billing/checkout", { plan });
+    return data;
+  },
+
+  async createBillingPortal() {
+    const { data } = await http.post<{ url: string }>("/billing/portal");
+    return data;
+  },
+
   async logout() {
     try {
       await http.post("/auth/logout");

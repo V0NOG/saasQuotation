@@ -16,6 +16,28 @@ router.get("/me", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/billing", requireAuth, async (req, res) => {
+  try {
+    const org = await Org.findById(req.user.orgId).select("name currency taxRate branding industry billing");
+    if (!org) return res.status(404).json({ message: "Org not found" });
+
+    return res.json({
+      billing: org.billing || null,
+      org: {
+        id: org._id,
+        name: org.name,
+        currency: org.currency,
+        taxRate: org.taxRate,
+        branding: org.branding,
+        industry: org.industry,
+      },
+    });
+  } catch (e) {
+    console.error("org billing error:", e);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
 router.patch("/me", requireAuth, async (req, res) => {
   try {
     const updates = req.body || {};

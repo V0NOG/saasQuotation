@@ -62,7 +62,12 @@ router.post("/register", async (req, res) => {
     const exists = await User.findOne({ email: emailLower });
     if (exists) return res.status(409).json({ message: "Email already in use" });
 
-    const org = await Org.create({ name: orgName });
+    const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days
+
+    const org = await Org.create({
+      name: orgName,
+      billing: { plan: "starter", status: "trialing", trialEndsAt },
+    });
 
     const passwordHash = await bcrypt.hash(String(password), 12);
     const user = await User.create({

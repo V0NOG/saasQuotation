@@ -9,6 +9,7 @@ const { computeQuoteTotals } = require("../utils/quoteMath");
 const { generatePublicToken } = require("../utils/tokens");
 const { streamQuotePdf, renderQuotePdf } = require("../utils/quotePdf");
 const { sendQuoteEmail } = require("../utils/mailer");
+const { requireActiveBilling } = require("../middleware/billing");
 
 const router = express.Router();
 
@@ -227,6 +228,7 @@ router.post("/:id/send", requireAuth, async (req, res) => {
 // POST /api/quotes/:id/email
 // body: { to?: string, message?: string, attachPdf?: boolean }
 // Idempotency via header: Idempotency-Key
+// POST /api/quotes/:id/email
 router.post("/:id/email", requireAuth, async (req, res) => {
   try {
     if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid quote id" });
@@ -240,8 +242,6 @@ router.post("/:id/email", requireAuth, async (req, res) => {
     const to = String(req.body?.to || quote.customerSnapshot?.email || "").trim();
     if (!to) return res.status(400).json({ message: "Customer email is missing" });
 
-    // Require public token link
-    // If missing but status isn't sent, enforce workflow.
     if (!quote.publicToken) {
       return res.status(409).json({ message: "Quote must be sent before emailing (no public link yet)" });
     }
@@ -249,16 +249,17 @@ router.post("/:id/email", requireAuth, async (req, res) => {
     const idemKey = String(req.headers["idempotency-key"] || "").trim();
     if (!idemKey) return res.status(400).json({ message: "Missing Idempotency-Key header" });
 
-    // Idempotency check
+    // fast idempotency check (non-atomic, but cheap)
     const already = (quote.emailHistory || []).find((h) => h && h.key === idemKey);
     if (already) {
       return res.json({ ok: true, duplicate: true, messageId: already.messageId || "" });
     }
 
-    const publicUrl = `${process.env.FRONTEND_URL}/quote/view/${quote.publicToken}`;
+    const appUrl = String(process.env.PUBLIC_APP_URL || process.env.FRONTEND_URL || "").replace(/\/+$/, "");
+    const publicUrl = `${appUrl}/quote/view/${quote.publicToken}`;
+
     const attachPdf = req.body?.attachPdf !== false; // default true
     const extraMessage = String(req.body?.message || "").trim();
-
     const subject = `Quote ${quote.quoteNumber}${quote.title ? ` - ${quote.title}` : ""}`;
 
     const text =
@@ -280,10 +281,7 @@ router.post("/:id/email", requireAuth, async (req, res) => {
     if (attachPdf) {
       const org = await Org.findById(orgId).select("name orgName");
       const pdfBuffer = await renderQuotePdf({ quote, org });
-      attachments.push({
-        filename: `${quote.quoteNumber}.pdf`,
-        content: pdfBuffer,
-      });
+      attachments.push({ filename: `${quote.quoteNumber}.pdf`, content: pdfBuffer });
     }
 
     const info = await sendQuoteEmail({ to, subject, text, html, attachments });
@@ -291,7 +289,7 @@ router.post("/:id/email", requireAuth, async (req, res) => {
     const rawMessageId = String(info?.messageId || "");
     const safeMessageId = rawMessageId.replace(/[\r\n]/g, "").slice(0, 200);
 
-    quote.emailHistory.push({
+    const historyEntry = {
       key: idemKey,
       to,
       subject,
@@ -299,9 +297,20 @@ router.post("/:id/email", requireAuth, async (req, res) => {
       sentAt: new Date(),
       actorUserId: userId,
       messageId: safeMessageId,
-    });
+    };
 
-    await quote.save();
+    // ✅ ATOMIC idempotency enforcement:
+    // Only push if this idemKey isn't already present.
+    const updated = await Quote.findOneAndUpdate(
+      { _id: quote._id, orgId, "emailHistory.key": { $ne: idemKey } },
+      { $push: { emailHistory: historyEntry } },
+      { new: true }
+    );
+
+    if (!updated) {
+      // Another request with same key won the race
+      return res.json({ ok: true, duplicate: true, messageId: safeMessageId });
+    }
 
     return res.json({ ok: true, messageId: safeMessageId });
   } catch (e) {
