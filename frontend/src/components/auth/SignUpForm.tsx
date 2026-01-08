@@ -1,4 +1,5 @@
-import { useState } from "react";
+// frontend/src/components/auth/SignUpForm.tsx
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "../../icons";
 import Label from "../form/Label";
@@ -37,7 +38,7 @@ function GoogleIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-type SignupBillingChoice = "trial" | "pay_now" | "skip";
+type PlanChoice = "starter" | "pro";
 
 export default function SignUpForm() {
   const navigate = useNavigate();
@@ -52,12 +53,19 @@ export default function SignUpForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
 
-  // ✅ Billing choices
-  const [billingChoice, setBillingChoice] = useState<SignupBillingChoice>("trial");
-  const [planChoice, setPlanChoice] = useState<"starter" | "pro">("starter");
+  // ✅ Plan selection (cards)
+  const [planChoice, setPlanChoice] = useState<PlanChoice>("starter");
+  const [wantsTrial, setWantsTrial] = useState(true); // only meaningful for starter
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isPro = planChoice === "pro";
+
+  const primaryCta = useMemo(() => {
+    if (isPro) return "Continue to payment";
+    return wantsTrial ? "Start free trial" : "Subscribe now";
+  }, [isPro, wantsTrial]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -86,16 +94,10 @@ export default function SignUpForm() {
       setUser(user);
       setOrg(org ?? null);
 
-      // ✅ Decide what to do next
-      if (billingChoice === "skip") {
-        navigate("/", { replace: true });
-        return;
-      }
-
-      // go to Stripe Checkout
+      // ✅ Always proceed to Stripe (no skip)
       const { url } = await authApi.createCheckoutSession({
         plan: planChoice,
-        trial: billingChoice === "trial" && planChoice === "starter",
+        trial: !isPro && wantsTrial, // starter can trial; pro always pay now
       });
 
       window.location.href = url;
@@ -125,7 +127,7 @@ export default function SignUpForm() {
               Create Account
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Create your account to get started.
+              Create your account and choose a plan to get started.
             </p>
           </div>
 
@@ -195,60 +197,109 @@ export default function SignUpForm() {
               </div>
             </div>
 
-            {/* ✅ Billing choice section */}
-            <div className="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
-              <div className="mb-3 text-sm font-semibold text-gray-800 dark:text-white/90">Billing</div>
-
-              <div className="mb-3 grid grid-cols-1 gap-2">
-                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                  <input
-                    type="radio"
-                    name="billingChoice"
-                    checked={billingChoice === "trial"}
-                    onChange={() => setBillingChoice("trial")}
-                  />
-                  Start 7-day free trial (Starter only, card required)
-                </label>
-
-                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                  <input
-                    type="radio"
-                    name="billingChoice"
-                    checked={billingChoice === "pay_now"}
-                    onChange={() => setBillingChoice("pay_now")}
-                  />
-                  Subscribe now (pay immediately)
-                </label>
-
-                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                  <input
-                    type="radio"
-                    name="billingChoice"
-                    checked={billingChoice === "skip"}
-                    onChange={() => setBillingChoice("skip")}
-                  />
-                  Skip for now (Free)
-                </label>
+            {/* ✅ Modern plan cards */}
+            <div className="rounded-2xl border border-gray-200 p-4 dark:border-gray-800">
+              <div className="mb-3 text-sm font-semibold text-gray-800 dark:text-white/90">
+                Choose your plan
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Plan:</span>
-                <select
-                  className="h-[44px] rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-brand-500 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
-                  value={planChoice}
-                  onChange={(e) => setPlanChoice(e.target.value as any)}
-                  disabled={billingChoice === "skip"}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlanChoice("starter");
+                    // keep wantsTrial as-is
+                  }}
+                  className={[
+                    "rounded-2xl border p-4 text-left transition",
+                    planChoice === "starter"
+                      ? "border-brand-500 bg-brand-50 dark:bg-white/5"
+                      : "border-gray-200 bg-white hover:bg-gray-50 dark:border-gray-800 dark:bg-transparent dark:hover:bg-white/[0.03]",
+                  ].join(" ")}
                 >
-                  <option value="starter">Starter</option>
-                  <option value="pro">Pro</option>
-                </select>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900 dark:text-white/90">
+                        Starter
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Solo trades • quoting essentials
+                      </div>
+                    </div>
+                    <div
+                      className={[
+                        "mt-0.5 h-4 w-4 rounded-full border",
+                        planChoice === "starter" ? "border-brand-500 bg-brand-500" : "border-gray-300 dark:border-gray-700",
+                      ].join(" ")}
+                      aria-hidden="true"
+                    />
+                  </div>
+
+                  <div className="mt-3 text-xs text-gray-600 dark:text-gray-400">
+                    • Quotes + PDF/email<br />
+                    • Customer management<br />
+                    • Pricebook basics
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlanChoice("pro");
+                    setWantsTrial(false); // pro is pay now
+                  }}
+                  className={[
+                    "rounded-2xl border p-4 text-left transition",
+                    planChoice === "pro"
+                      ? "border-brand-500 bg-brand-50 dark:bg-white/5"
+                      : "border-gray-200 bg-white hover:bg-gray-50 dark:border-gray-800 dark:bg-transparent dark:hover:bg-white/[0.03]",
+                  ].join(" ")}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900 dark:text-white/90">
+                        Pro
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Teams • automation + controls
+                      </div>
+                    </div>
+                    <div
+                      className={[
+                        "mt-0.5 h-4 w-4 rounded-full border",
+                        planChoice === "pro" ? "border-brand-500 bg-brand-500" : "border-gray-300 dark:border-gray-700",
+                      ].join(" ")}
+                      aria-hidden="true"
+                    />
+                  </div>
+
+                  <div className="mt-3 text-xs text-gray-600 dark:text-gray-400">
+                    • Everything in Starter<br />
+                    • More automation (soon)<br />
+                    • Team roles
+                  </div>
+                </button>
               </div>
 
-              {billingChoice === "trial" && planChoice === "pro" ? (
-                <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                  Trial is only available on Starter. Switch plan to Starter or choose “Subscribe now”.
+              {/* Trial toggle */}
+              <div className="mt-4 flex items-center justify-between rounded-xl border border-gray-200 p-4 text-sm dark:border-gray-800">
+                <div>
+                  <div className="font-medium text-gray-800 dark:text-white/90">7-day free trial</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    Card required. Cancel anytime.
+                  </div>
                 </div>
-              ) : null}
+
+                <label className={`inline-flex items-center gap-2 ${isPro ? "opacity-50" : ""}`}>
+                  <input
+                    type="checkbox"
+                    checked={isPro ? false : wantsTrial}
+                    onChange={(e) => setWantsTrial(e.target.checked)}
+                    disabled={isPro}
+                  />
+                  <span className="text-gray-700 dark:text-gray-300">Enable</span>
+                </label>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -262,7 +313,7 @@ export default function SignUpForm() {
             </div>
 
             <Button className="w-full" disabled={loading}>
-              {loading ? "Signing up..." : "Create account"}
+              {loading ? "Signing up..." : primaryCta}
             </Button>
           </form>
 

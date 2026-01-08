@@ -1,333 +1,159 @@
-import { useModal } from "../../../hooks/useModal";
+// frontend/src/components/ecommerce/billing/InvoiceTable.tsx
 import Button from "../../ui/button/Button";
-import { Modal } from "../../ui/modal";
+import { authApi, type BillingInvoice } from "../../../api/authApi";
+import { useEffect, useMemo, useState } from "react";
 
-export default function BillingInfo() {
-  const { isOpen, openModal, closeModal } = useModal();
-  const handleSave = () => {
-    // Handle save logic here
-    console.log("Saving changes...");
-    closeModal();
-  };
+function fmtMoney(minor: number, currency: string) {
+  try {
+    const major = (minor || 0) / 100;
+    return new Intl.NumberFormat(undefined, { style: "currency", currency: (currency || "AUD").toUpperCase() }).format(
+      major
+    );
+  } catch {
+    return `${((minor || 0) / 100).toFixed(2)} ${(currency || "").toUpperCase()}`;
+  }
+}
+
+function fmtDate(iso: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString();
+}
+
+function badge(status: string) {
+  const s = (status || "").toLowerCase();
+  if (s === "paid") return "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-200";
+  if (s === "open") return "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-200";
+  if (s === "void") return "bg-gray-100 text-gray-700 dark:bg-white/5 dark:text-gray-200";
+  if (s === "uncollectible") return "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-200";
+  return "bg-gray-100 text-gray-700 dark:bg-white/5 dark:text-gray-200";
+}
+
+export default function InvoiceTable() {
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<BillingInvoice[]>([]);
+
+  async function openPortal() {
+    try {
+      setBusy(true);
+      const { url } = await authApi.createBillingPortal();
+      window.location.href = url;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        const inv = await authApi.billingInvoices(10);
+        if (mounted) setItems(inv);
+      } catch {
+        if (mounted) setItems([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const empty = useMemo(() => !loading && items.length === 0, [loading, items.length]);
+
   return (
-    <>
-      <div className="rounded-2xl border border-gray-200 bg-white xl:w-2/6 dark:border-gray-800 dark:bg-white/[0.03]">
-        <div className="px-6 py-5">
-          <h3 className="text-base font-medium text-gray-800 dark:text-white/90">
-            Billing Info
-          </h3>
+    <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+      <div className="flex flex-col justify-between gap-4 px-6 py-5 sm:flex-row sm:items-center">
+        <div>
+          <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Invoices</h3>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Recent invoices from Stripe.</p>
         </div>
-        <div className="border-t border-gray-200 p-4 sm:p-6 dark:border-gray-800">
-          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
-            <li className="flex items-center gap-5 py-2.5">
-              <span className="w-1/2 text-sm text-gray-500 sm:w-1/3 dark:text-gray-400">
-                Name
-              </span>
-              <span className="w-1/2 text-sm font-medium text-gray-700 sm:w-2/3 dark:text-gray-400">
-                Mushafrof Chowdhury
-              </span>
-            </li>
-            <li className="flex items-center gap-5 py-2.5">
-              <span className="w-1/2 text-sm text-gray-500 sm:w-1/3 dark:text-gray-400">
-                Street
-              </span>
-              <span className="w-1/2 text-sm font-medium text-gray-700 sm:w-2/3 dark:text-gray-400">
-                800 E Elcamino Real, suite #400
-              </span>
-            </li>
-            <li className="flex items-center gap-5 py-2.5">
-              <span className="w-1/2 text-sm text-gray-500 sm:w-1/3 dark:text-gray-400">
-                City/State
-              </span>
-              <span className="w-1/2 text-sm font-medium text-gray-700 sm:w-2/3 dark:text-gray-400">
-                Mountain View, CA, 94040
-              </span>
-            </li>
-            <li className="flex items-center gap-5 py-2.5">
-              <span className="w-1/2 text-sm text-gray-500 sm:w-1/3 dark:text-gray-400">
-                Country
-              </span>
-              <span className="w-1/2 text-sm font-medium text-gray-700 sm:w-2/3 dark:text-gray-400">
-                United States of America
-              </span>
-            </li>
-            <li className="flex items-center gap-5 py-2.5">
-              <span className="w-1/2 text-sm text-gray-500 sm:w-1/3 dark:text-gray-400">
-                Zip/Postal code
-              </span>
-              <span className="w-1/2 text-sm font-medium text-gray-700 sm:w-2/3 dark:text-gray-400">
-                19029
-              </span>
-            </li>
-            <li className="flex items-center gap-5 py-2.5">
-              <span className="w-1/2 text-sm text-gray-500 sm:w-1/3 dark:text-gray-400">
-                Town/City
-              </span>
-              <span className="w-1/2 text-sm font-medium text-gray-700 sm:w-2/3 dark:text-gray-400">
-                New York
-              </span>
-            </li>
-            <li className="flex items-center gap-5 py-2.5">
-              <span className="w-1/2 text-sm text-gray-500 sm:w-1/3 dark:text-gray-400">
-                VAT Number
-              </span>
-              <span className="w-1/2 text-sm font-medium text-gray-700 sm:w-2/3 dark:text-gray-400">
-                DE4920348
-              </span>
-            </li>
-          </ul>
 
-          <div className="mt-10 xl:mt-2 2xl:mt-12">
-            <Button
-              onClick={openModal}
-              variant="outline"
-              className="w-full h-11"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="21"
-                height="20"
-                viewBox="0 0 21 20"
-                fill="none"
-              >
-                <path
-                  d="M12.8861 5.08135L15.4182 7.61345M16.1437 3.59219L16.908 4.35652C17.3962 4.84468 17.3962 5.63613 16.908 6.12429L8.33547 14.6968C8.19039 14.8419 8.01182 14.9491 7.81554 15.0088L4.47461 16.0256L5.49141 12.6847C5.55115 12.4884 5.65829 12.3098 5.80337 12.1647L14.3759 3.59219C14.8641 3.10404 15.6555 3.10404 16.1437 3.59219Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              Update Billing Address
-            </Button>
-          </div>
+        <div className="flex gap-2">
+          <Button variant="outline" className="h-11" onClick={openPortal} disabled={busy}>
+            {busy ? "Opening…" : "Open Stripe Portal"}
+          </Button>
         </div>
       </div>
 
-      <Modal
-        isOpen={isOpen}
-        onClose={closeModal}
-        className="relative w-full m-5 sm:m-0 max-w-[558px] rounded-3xl bg-white p-6 lg:p-10 dark:bg-gray-900"
-      >
-        <div>
-          <div className="px-1">
-            <h4 className="text-title-xs mb-1 font-semibold text-gray-800 dark:text-white/90">
-              New integration
-            </h4>
-            <p className="mb-7 text-sm leading-6 text-gray-500 dark:text-gray-400">
-              Set up an integration and add a brief explanation for the team.
+      <div className="border-t border-gray-200 p-6 dark:border-gray-800">
+        {loading ? (
+          <div className="text-sm text-gray-600 dark:text-gray-400">Loading invoices…</div>
+        ) : empty ? (
+          <div className="rounded-2xl border border-dashed border-gray-200 p-6 text-center dark:border-gray-800">
+            <div className="text-sm font-semibold text-gray-800 dark:text-white/90">No invoices yet</div>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Invoices appear after your first payment (or trial conversion).
             </p>
+            <div className="mt-4 flex justify-center">
+              <Button variant="outline" className="h-11" onClick={openPortal} disabled={busy}>
+                View in Stripe
+              </Button>
+            </div>
           </div>
-
-          <div className="custom-scrollbar h-[490px] overflow-y-auto sm:h-auto px-1">
-            <form action="#">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    First Name
-                  </label>
-                  <input
-                    type="text"
-                    value="Mushafrof"
-                    className="dark:bg-dark-900 shadow-theme-xs focus:border-brand-300 focus:ring-brand-500/10 dark:focus:border-brand-800 h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:ring-3 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Last Name
-                  </label>
-                  <input
-                    type="text"
-                    value="Chowdhury"
-                    className="dark:bg-dark-900 shadow-theme-xs focus:border-brand-300 focus:ring-brand-500/10 dark:focus:border-brand-800 h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:ring-3 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-                  />
-                </div>
-                <div className="sm:col-span-full">
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Street
-                  </label>
-                  <input
-                    type="text"
-                    value="800 E Elcamino Real, suite #400"
-                    className="dark:bg-dark-900 shadow-theme-xs focus:border-brand-300 focus:ring-brand-500/10 dark:focus:border-brand-800 h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:ring-3 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-                  />
-                </div>
-                <div className="sm:col-span-1">
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Country
-                  </label>
-                  <div
-                    x-data="{ isOptionSelected: false }"
-                    className="relative z-20 bg-transparent"
-                  >
-                    <select className="dark:bg-dark-900 shadow-theme-xs focus:border-brand-300 focus:ring-brand-500/10 dark:focus:border-brand-800 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 pr-11 text-sm text-gray-800 placeholder:text-gray-400 focus:ring-3 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30">
-                      <option
-                        value=""
-                        className="text-gray-700 dark:bg-gray-900 dark:text-gray-400"
-                      >
-                        Select Option
-                      </option>
-                      <option
-                        value=""
-                        className="text-gray-700 dark:bg-gray-900 dark:text-gray-400"
-                      >
-                        USA
-                      </option>
-                      <option
-                        value=""
-                        className="text-gray-700 dark:bg-gray-900 dark:text-gray-400"
-                      >
-                        UK
-                      </option>
-                      <option
-                        value=""
-                        className="text-gray-700 dark:bg-gray-900 dark:text-gray-400"
-                      >
-                        BD
-                      </option>
-                      <option
-                        value=""
-                        className="text-gray-700 dark:bg-gray-900 dark:text-gray-400"
-                      >
-                        EU
-                      </option>
-                      <option
-                        value=""
-                        className="text-gray-700 dark:bg-gray-900 dark:text-gray-400"
-                      >
-                        ID
-                      </option>
-                    </select>
-                    <span className="pointer-events-none absolute top-1/2 right-4 z-30 -translate-y-1/2 text-gray-500 dark:text-gray-400">
-                      <svg
-                        className="stroke-current"
-                        width="20"
-                        height="20"
-                        viewBox="0 0 20 20"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <path
-                          d="M4.79175 7.396L10.0001 12.6043L15.2084 7.396"
-                          stroke=""
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </span>
-                  </div>
-                </div>
-                <div className="sm:col-span-1">
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Town/City
-                  </label>
-                  <div
-                    x-data="{ isOptionSelected: false }"
-                    className="relative z-20 bg-transparent"
-                  >
-                    <select className="dark:bg-dark-900 shadow-theme-xs focus:border-brand-300 focus:ring-brand-500/10 dark:focus:border-brand-800 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 pr-11 text-sm text-gray-800 placeholder:text-gray-400 focus:ring-3 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30">
-                      <option
-                        value=""
-                        className="text-gray-700 dark:bg-gray-900 dark:text-gray-400"
-                      >
-                        Select Option
-                      </option>
-                      <option
-                        value=""
-                        className="text-gray-700 dark:bg-gray-900 dark:text-gray-400"
-                      >
-                        New York
-                      </option>
-                      <option
-                        value=""
-                        className="text-gray-700 dark:bg-gray-900 dark:text-gray-400"
-                      >
-                        Tokyo
-                      </option>
-                      <option
-                        value=""
-                        className="text-gray-700 dark:bg-gray-900 dark:text-gray-400"
-                      >
-                        Chicago
-                      </option>
-                      <option
-                        value=""
-                        className="text-gray-700 dark:bg-gray-900 dark:text-gray-400"
-                      >
-                        Los Angels
-                      </option>
-                      <option
-                        value=""
-                        className="text-gray-700 dark:bg-gray-900 dark:text-gray-400"
-                      >
-                        Berlin
-                      </option>
-                    </select>
-                    <span className="pointer-events-none absolute top-1/2 right-4 z-30 -translate-y-1/2 text-gray-500 dark:text-gray-400">
-                      <svg
-                        className="stroke-current"
-                        width="20"
-                        height="20"
-                        viewBox="0 0 20 20"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <path
-                          d="M4.79175 7.396L10.0001 12.6043L15.2084 7.396"
-                          stroke=""
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Zip/Postal code
-                  </label>
-                  <input
-                    type="text"
-                    value="19029"
-                    className="dark:bg-dark-900 shadow-theme-xs focus:border-brand-300 focus:ring-brand-500/10 dark:focus:border-brand-800 h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:ring-3 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    VAT Number
-                  </label>
-                  <input
-                    type="text"
-                    value="DE4920348"
-                    className="dark:bg-dark-900 shadow-theme-xs focus:border-brand-300 focus:ring-brand-500/10 dark:focus:border-brand-800 h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:ring-3 focus:outline-hidden dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
-                  />
-                </div>
-              </div>
-
-              <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
-                Click “Update Info” to update your billing information.
-              </p>
-            </form>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-gray-200 dark:border-gray-800">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-gray-50 text-gray-600 dark:bg-white/[0.02] dark:text-gray-400">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Invoice</th>
+                  <th className="px-4 py-3 font-medium">Date</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Total</th>
+                  <th className="px-4 py-3 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                {items.map((inv) => (
+                  <tr key={inv.id} className="text-gray-700 dark:text-gray-300">
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-gray-800 dark:text-white/90">
+                        {inv.number || inv.id}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{inv.id}</div>
+                    </td>
+                    <td className="px-4 py-3">{fmtDate(inv.created)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${badge(inv.status)}`}>
+                        {inv.status || "unknown"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">{fmtMoney(inv.total, inv.currency)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-2">
+                        {inv.invoicePdf ? (
+                          <a
+                            className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-white/[0.03]"
+                            href={inv.invoicePdf}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            PDF
+                          </a>
+                        ) : null}
+                        {inv.hostedInvoiceUrl ? (
+                          <a
+                            className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-white/[0.03]"
+                            href={inv.hostedInvoiceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            View
+                          </a>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="mt-8 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              className="shadow-theme-xs flex justify-center rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] dark:hover:text-gray-200"
-            >
-              Close
-            </button>
-            <button
-              onClick={handleSave}
-              type="button"
-              className="bg-brand-500 shadow-theme-xs hover:bg-brand-600 flex justify-center rounded-lg px-4 py-3 text-sm font-medium text-white"
-            >
-              Update Info
-            </button>
-          </div>
-        </div>
-      </Modal>
-    </>
+        )}
+      </div>
+    </div>
   );
 }

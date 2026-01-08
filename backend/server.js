@@ -67,7 +67,7 @@ app.use(
 );
 
 // ✅ Make preflight predictable (helps with cookies + credentials)
-app.options("*", cors({ credentials: true, origin: allowedOrigins }));
+app.options(/.*/, cors({ credentials: true, origin: allowedOrigins }));
 
 app.use(passport.initialize());
 

@@ -40,17 +40,21 @@ export default function Billing() {
   const [billing, setBilling] = useState<BillingState>(DEFAULT_BILLING);
   const [loading, setLoading] = useState(true);
 
-  async function fetchBilling() {
+  async function fetchBilling(): Promise<BillingState> {
     const data = await authApi.billingMe();
     const b = data?.billing || {};
-    setBilling({
+
+    const next: BillingState = {
       plan: (b.plan as any) || "free",
       status: (b.status as any) || "free",
       trialEndsAt: b.trialEndsAt ?? null,
       currentPeriodEnd: b.currentPeriodEnd ?? null,
       stripeCustomerId: b.stripeCustomerId || "",
       stripeSubscriptionId: b.stripeSubscriptionId || "",
-    });
+    };
+
+    setBilling(next);
+    return next;
   }
 
   useEffect(() => {
@@ -59,16 +63,18 @@ export default function Billing() {
     (async () => {
       try {
         setLoading(true);
-        await fetchBilling();
+
+        // initial load
+        let current = await fetchBilling();
 
         // ✅ if returning from Stripe, poll briefly for webhook propagation
         if (success) {
           for (let i = 0; i < 6; i++) {
             if (!mounted) return;
+            if (current.status === "active" || current.status === "trialing") break;
+
             await sleep(1500);
-            await fetchBilling();
-            // stop early if not free anymore
-            if (mounted && (billing.status === "active" || billing.status === "trialing")) break;
+            current = await fetchBilling();
           }
         }
       } catch {
@@ -109,7 +115,6 @@ export default function Billing() {
             <BillingInfo />
           </div>
 
-          {/* Converted these sections to real "Stripe source of truth" UI */}
           <PaymentMethod />
           <InvoiceTable />
         </>
