@@ -89,7 +89,7 @@ router.post("/quotes/:token/accept", async (req, res) => {
 
     await session.withTransaction(async () => {
       const current = await Quote.findOne({ publicToken: token })
-        .select("orgId status publicTokenExpiresAt customerSnapshot title notes lines subtotalExTax taxTotal totalIncTax jobId")
+        .select("_id orgId createdBy status publicTokenExpiresAt customerSnapshot title notes lines subtotalExTax taxTotal totalIncTax jobId quoteNumber")
         .session(session);
 
       if (!current) throw Object.assign(new Error("NOT_FOUND"), { http: 404 });
@@ -131,7 +131,7 @@ router.post("/quotes/:token/accept", async (req, res) => {
         [
           {
             orgId: current.orgId,
-            createdBy: null, // public acceptance
+            createdBy: current.createdBy,
             quoteId: current._id,
             jobNumber,
             status: "created",
@@ -221,7 +221,9 @@ router.post("/quotes/:token/decline", async (req, res) => {
     const token = String(req.params.token || "").trim();
     if (!token) return res.status(400).json({ message: "Missing token" });
 
-    const current = await Quote.findOne({ publicToken: token }).select("status publicTokenExpiresAt");
+    const current = await Quote.findOne({ publicToken: token }).select(
+      "status publicTokenExpiresAt orgId createdBy customerSnapshot subtotalExTax taxTotal totalIncTax title _id quoteNumber"
+    );
     if (!current) return res.status(404).json({ message: "Quote not found" });
     if (isTokenExpired(current)) return res.status(410).json({ message: "Quote link expired" });
 

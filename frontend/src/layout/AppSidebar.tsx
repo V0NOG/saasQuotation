@@ -36,15 +36,15 @@ const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
     name: "Dashboard",
-    subItems: [
-      { name: "Ecommerce", path: "/" },
-      { name: "Analytics", path: "/analytics" },
-      { name: "Marketing", path: "/marketing" },
-      { name: "CRM", path: "/crm" },
-      { name: "Stocks", path: "/stocks" },
-      { name: "SaaS", path: "/saas", new: true },
-      { name: "Logistics", path: "/logistics", new: true },
-    ],
+    // subItems: [
+    //   { name: "Ecommerce", path: "/" },
+    //   { name: "Analytics", path: "/analytics" },
+    //   { name: "Marketing", path: "/marketing" },
+    //   { name: "CRM", path: "/crm" },
+    //   { name: "Stocks", path: "/stocks" },
+    //   { name: "SaaS", path: "/saas", new: true },
+    //   { name: "Logistics", path: "/logistics", new: true },
+    // ],
   },
   {
     icon: <UserCircleIcon />,
@@ -65,162 +65,167 @@ const navItems: NavItem[] = [
     path: "/quotes",
   },
   {
-    name: "AI Assistant",
-    icon: <AiIcon />,
-    new: true,
-    subItems: [
-      { name: "Text Generator", path: "/text-generator" },
-      { name: "Image Generator", path: "/image-generator" },
-      { name: "Code Generator", path: "/code-generator" },
-      { name: "Video Generator", path: "/video-generator" },
-    ],
+    name: "Jobs",
+    icon: <TableIcon />,
+    path: "/jobs",
   },
-  {
-    name: "E-commerce",
-    icon: <CartIcon />,
-    new: true,
-    subItems: [
-      { name: "Products", path: "/products-list" },
-      { name: "Add Product", path: "/add-product" },
-      { name: "Billing", path: "/billing" },
-      { name: "Invoices", path: "/invoices" },
-      { name: "Single Invoice", path: "/single-invoice" },
-      { name: "Create Invoice", path: "/create-invoice" },
-      { name: "Transactions", path: "/transactions" },
-      { name: "Single Transaction", path: "/single-transaction" },
-    ],
-  },
+  // {
+  //   name: "AI Assistant",
+  //   icon: <AiIcon />,
+  //   new: true,
+  //   subItems: [
+  //     { name: "Text Generator", path: "/text-generator" },
+  //     { name: "Image Generator", path: "/image-generator" },
+  //     { name: "Code Generator", path: "/code-generator" },
+  //     { name: "Video Generator", path: "/video-generator" },
+  //   ],
+  // },
+  // {
+  //   name: "E-commerce",
+  //   icon: <CartIcon />,
+  //   new: true,
+  //   subItems: [
+  //     { name: "Products", path: "/products-list" },
+  //     { name: "Add Product", path: "/add-product" },
+  //     { name: "Billing", path: "/billing" },
+  //     { name: "Invoices", path: "/invoices" },
+  //     { name: "Single Invoice", path: "/single-invoice" },
+  //     { name: "Create Invoice", path: "/create-invoice" },
+  //     { name: "Transactions", path: "/transactions" },
+  //     { name: "Single Transaction", path: "/single-transaction" },
+  //   ],
+  // },
   {
     icon: <CalenderIcon />,
     name: "Calendar",
     path: "/calendar",
   },
-  {
-    icon: <UserCircleIcon />,
-    name: "User Profile",
-    path: "/profile",
-  },
-  {
-    name: "Task",
-    icon: <TaskIcon />,
-    subItems: [
-      { name: "List", path: "/task-list", pro: true },
-      { name: "Kanban", path: "/task-kanban", pro: true },
-    ],
-  },
-  {
-    name: "Forms",
-    icon: <ListIcon />,
-    subItems: [
-      { name: "Form Elements", path: "/form-elements", pro: false },
-      { name: "Form Layout", path: "/form-layout", pro: true },
-    ],
-  },
-  {
-    name: "Tables",
-    icon: <TableIcon />,
-    subItems: [
-      { name: "Basic Tables", path: "/basic-tables", pro: false },
-      { name: "Data Tables", path: "/data-tables", pro: true },
-    ],
-  },
-  {
-    name: "Pages",
-    icon: <PageIcon />,
-    subItems: [
-      { name: "File Manager", path: "/file-manager" },
-      { name: "Pricing Tables", path: "/pricing-tables" },
-      { name: "FAQ", path: "/faq" },
-      { name: "API Keys", path: "/api-keys", new: true },
-      { name: "Integrations", path: "/integrations", new: true },
-      { name: "Blank Page", path: "/blank" },
-      { name: "404 Error", path: "/error-404" },
-      { name: "500 Error", path: "/error-500" },
-      { name: "503 Error", path: "/error-503" },
-      { name: "Coming Soon", path: "/coming-soon" },
-      { name: "Maintenance", path: "/maintenance" },
-      { name: "Success", path: "/success" },
-    ],
-  },
+  // {
+  //   icon: <UserCircleIcon />,
+  //   name: "User Profile",
+  //   path: "/profile",
+  // },
+  // {
+  //   name: "Task",
+  //   icon: <TaskIcon />,
+  //   subItems: [
+  //     { name: "List", path: "/task-list", pro: true },
+  //     { name: "Kanban", path: "/task-kanban", pro: true },
+  //   ],
+  // },
+  // {
+  //   name: "Forms",
+  //   icon: <ListIcon />,
+  //   subItems: [
+  //     { name: "Form Elements", path: "/form-elements", pro: false },
+  //     { name: "Form Layout", path: "/form-layout", pro: true },
+  //   ],
+  // },
+  // {
+  //   name: "Tables",
+  //   icon: <TableIcon />,
+  //   subItems: [
+  //     { name: "Basic Tables", path: "/basic-tables", pro: false },
+  //     { name: "Data Tables", path: "/data-tables", pro: true },
+  //   ],
+  // },
+  // {
+  //   name: "Pages",
+  //   icon: <PageIcon />,
+  //   subItems: [
+  //     { name: "File Manager", path: "/file-manager" },
+  //     { name: "Pricing Tables", path: "/pricing-tables" },
+  //     { name: "FAQ", path: "/faq" },
+  //     { name: "API Keys", path: "/api-keys", new: true },
+  //     { name: "Integrations", path: "/integrations", new: true },
+  //     { name: "Blank Page", path: "/blank" },
+  //     { name: "404 Error", path: "/error-404" },
+  //     { name: "500 Error", path: "/error-500" },
+  //     { name: "503 Error", path: "/error-503" },
+  //     { name: "Coming Soon", path: "/coming-soon" },
+  //     { name: "Maintenance", path: "/maintenance" },
+  //     { name: "Success", path: "/success" },
+  //   ],
+  // },
 ];
 
 const othersItems: NavItem[] = [
-  {
-    icon: <PieChartIcon />,
-    name: "Charts",
-    subItems: [
-      { name: "Line Chart", path: "/line-chart", pro: true },
-      { name: "Bar Chart", path: "/bar-chart", pro: true },
-      { name: "Pie Chart", path: "/pie-chart", pro: true },
-    ],
-  },
-  {
-    icon: <BoxCubeIcon />,
-    name: "UI Elements",
-    subItems: [
-      { name: "Alerts", path: "/alerts", pro: false },
-      { name: "Avatar", path: "/avatars", pro: false },
-      { name: "Badge", path: "/badge", pro: false },
-      { name: "Breadcrumb", path: "/breadcrumb", pro: false },
-      { name: "Buttons", path: "/buttons", pro: false },
-      { name: "Buttons Group", path: "/buttons-group", pro: false },
-      { name: "Cards", path: "/cards", pro: false },
-      { name: "Carousel", path: "/carousel", pro: false },
-      { name: "Dropdowns", path: "/dropdowns", pro: false },
-      { name: "Images", path: "/images", pro: false },
-      { name: "Links", path: "/links", pro: false },
-      { name: "List", path: "/list", pro: false },
-      { name: "Modals", path: "/modals", pro: false },
-      { name: "Notification", path: "/notifications", pro: false },
-      { name: "Pagination", path: "/pagination", pro: false },
-      { name: "Popovers", path: "/popovers", pro: false },
-      { name: "Progressbar", path: "/progress-bar", pro: false },
-      { name: "Ribbons", path: "/ribbons", pro: false },
-      { name: "Spinners", path: "/spinners", pro: false },
-      { name: "Tabs", path: "/tabs", pro: false },
-      { name: "Tooltips", path: "/tooltips", pro: false },
-      { name: "Videos", path: "/videos", pro: false },
-    ],
-  },
-  {
-    icon: <PlugInIcon />,
-    name: "Authentication",
-    subItems: [
-      { name: "Sign In", path: "/signin", pro: false },
-      { name: "Sign Up", path: "/signup", pro: false },
-      { name: "Reset Password", path: "/reset-password", pro: false },
-      {
-        name: "Two Step Verification",
-        path: "/two-step-verification",
-        pro: false,
-      },
-    ],
-  },
+  // {
+  //   icon: <PieChartIcon />,
+  //   name: "Charts",
+  //   subItems: [
+  //     { name: "Line Chart", path: "/line-chart", pro: true },
+  //     { name: "Bar Chart", path: "/bar-chart", pro: true },
+  //     { name: "Pie Chart", path: "/pie-chart", pro: true },
+  //   ],
+  // },
+  // {
+  //   icon: <BoxCubeIcon />,
+  //   name: "UI Elements",
+  //   subItems: [
+  //     { name: "Alerts", path: "/alerts", pro: false },
+  //     { name: "Avatar", path: "/avatars", pro: false },
+  //     { name: "Badge", path: "/badge", pro: false },
+  //     { name: "Breadcrumb", path: "/breadcrumb", pro: false },
+  //     { name: "Buttons", path: "/buttons", pro: false },
+  //     { name: "Buttons Group", path: "/buttons-group", pro: false },
+  //     { name: "Cards", path: "/cards", pro: false },
+  //     { name: "Carousel", path: "/carousel", pro: false },
+  //     { name: "Dropdowns", path: "/dropdowns", pro: false },
+  //     { name: "Images", path: "/images", pro: false },
+  //     { name: "Links", path: "/links", pro: false },
+  //     { name: "List", path: "/list", pro: false },
+  //     { name: "Modals", path: "/modals", pro: false },
+  //     { name: "Notification", path: "/notifications", pro: false },
+  //     { name: "Pagination", path: "/pagination", pro: false },
+  //     { name: "Popovers", path: "/popovers", pro: false },
+  //     { name: "Progressbar", path: "/progress-bar", pro: false },
+  //     { name: "Ribbons", path: "/ribbons", pro: false },
+  //     { name: "Spinners", path: "/spinners", pro: false },
+  //     { name: "Tabs", path: "/tabs", pro: false },
+  //     { name: "Tooltips", path: "/tooltips", pro: false },
+  //     { name: "Videos", path: "/videos", pro: false },
+  //   ],
+  // },
+  // {
+  //   icon: <PlugInIcon />,
+  //   name: "Authentication",
+  //   subItems: [
+  //     { name: "Sign In", path: "/signin", pro: false },
+  //     { name: "Sign Up", path: "/signup", pro: false },
+  //     { name: "Reset Password", path: "/reset-password", pro: false },
+  //     {
+  //       name: "Two Step Verification",
+  //       path: "/two-step-verification",
+  //       pro: false,
+  //     },
+  //   ],
+  // },
 ];
 
 const supportItems: NavItem[] = [
-  {
-    icon: <ChatIcon />,
-    name: "Chat",
-    path: "/chat",
-  },
-  {
-    icon: <CallIcon />,
-    name: "Support Ticket",
-    new: true,
-    subItems: [
-      { name: "Ticket List", path: "/support-tickets" },
-      { name: "Ticket Reply", path: "/support-ticket-reply" },
-    ],
-  },
-  {
-    icon: <MailIcon />,
-    name: "Email",
-    subItems: [
-      { name: "Inbox", path: "/inbox" },
-      { name: "Details", path: "/inbox-details" },
-    ],
-  },
+  // {
+  //   icon: <ChatIcon />,
+  //   name: "Chat",
+  //   path: "/chat",
+  // },
+  // {
+  //   icon: <CallIcon />,
+  //   name: "Support Ticket",
+  //   new: true,
+  //   subItems: [
+  //     { name: "Ticket List", path: "/support-tickets" },
+  //     { name: "Ticket Reply", path: "/support-ticket-reply" },
+  //   ],
+  // },
+  // {
+  //   icon: <MailIcon />,
+  //   name: "Email",
+  //   subItems: [
+  //     { name: "Inbox", path: "/inbox" },
+  //     { name: "Details", path: "/inbox-details" },
+  //   ],
+  // },
 ];
 
 const AppSidebar: React.FC = () => {
@@ -547,7 +552,7 @@ const AppSidebar: React.FC = () => {
             </div>
           </div>
         </nav>
-        {isExpanded || isHovered || isMobileOpen ? <SidebarWidget /> : null}
+        {/* {isExpanded || isHovered || isMobileOpen ? <SidebarWidget /> : null} */}
       </div>
     </aside>
   );

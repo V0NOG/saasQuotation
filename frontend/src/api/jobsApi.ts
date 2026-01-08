@@ -1,0 +1,50 @@
+// frontend/src/api/jobsApi.ts
+import { http } from "./http";
+
+export type JobStatus = "created" | "scheduled" | "in_progress" | "completed" | "canceled";
+
+export type Job = {
+  _id: string;
+  jobNumber: string;
+  status: JobStatus;
+  title?: string;
+
+  customerSnapshot?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+  };
+
+  scheduledStart?: string | null;
+  scheduledEnd?: string | null;
+
+  subtotalExTax?: number;
+  taxTotal?: number;
+  totalIncTax?: number;
+
+  quoteId?: string;
+
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type JobListResponse = {
+  items: Job[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+export const jobsApi = {
+  async list(params: { page?: number; limit?: number; search?: string; status?: JobStatus | "" }) {
+    const { data } = await http.get<JobListResponse>("/jobs", { params });
+    return data;
+  },
+
+  async get(id: string) {
+    const { data } = await http.get<{ job: Job }>(`/jobs/${id}`);
+    return data.job;
+  },
+};

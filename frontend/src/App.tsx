@@ -97,6 +97,9 @@ import Materials from "./pages/Pricebook/Materials";
 import QuotesList from "./pages/Quotes/QuotesList";
 import QuoteEditor from "./pages/Quotes/QuoteEditor";
 
+import JobsList from "./pages/Jobs/JobsList";
+import JobDetail from "./pages/Jobs/JobDetail";
+
 // ✅ NEW: public quote view
 import PublicQuoteView from "./pages/PublicQuote/PublicQuoteView";
 
@@ -146,6 +149,8 @@ export default function App() {
           <Route path="/quotes" element={<QuotesList />} />
           <Route path="/quotes/new" element={<QuoteEditor />} />
           <Route path="/quotes/:id" element={<QuoteEditor />} />
+          <Route path="/jobs" element={<JobsList />} />
+          <Route path="/jobs/:id" element={<JobDetail />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/marketing" element={<Marketing />} />
           <Route path="/crm" element={<Crm />} />
