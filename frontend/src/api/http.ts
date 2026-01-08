@@ -30,6 +30,40 @@ export function isLoggedIn() {
   return !!accessToken;
 }
 
+/**
+ * ✅ Billing event helper (UI can listen and redirect to /billing)
+ */
+function notifyBillingRequired(payload?: any) {
+  try {
+    window.dispatchEvent(
+      new CustomEvent("billing:required", {
+        detail: payload ?? {},
+      })
+    );
+  } catch {
+    // ignore
+  }
+}
+
+function isBillingEndpoint(url?: string) {
+  if (!url) return false;
+  // axios config.url is usually like "/quotes" etc
+  return (
+    url.startsWith("/billing") ||
+    url.startsWith("/org/billing") ||
+    url.startsWith("/org/me") // optional: keep org/me accessible even when gated
+  );
+}
+
+function isAuthRefreshEndpoint(url?: string) {
+  return Boolean(url && url.startsWith("/auth/refresh"));
+}
+
+function isPublicEndpoint(url?: string) {
+  if (!url) return false;
+  return url.startsWith("/public");
+}
+
 http.interceptors.request.use((config) => {
   if (accessToken) {
     config.headers = config.headers ?? {};
@@ -43,9 +77,32 @@ let refreshing: Promise<string | null> | null = null;
 http.interceptors.response.use(
   (r) => r,
   async (err) => {
-    const original = err.config;
+    const original = err?.config as any;
+    const status = err?.response?.status as number | undefined;
+    const url = (original?.url as string | undefined) || "";
 
-    if (err.response?.status === 401 && !original?._retry) {
+    /**
+     * ✅ Global billing gate handling
+     * - Don’t fire for billing/org billing endpoints (prevents loops on Billing page)
+     * - Don’t fire for public endpoints
+     */
+    if (status === 402 && !isBillingEndpoint(url) && !isPublicEndpoint(url)) {
+      notifyBillingRequired({
+        status: 402,
+        url,
+        message: err?.response?.data?.message,
+        data: err?.response?.data,
+      });
+      return Promise.reject(err);
+    }
+
+    /**
+     * ✅ Refresh flow
+     * - Only for 401s
+     * - Do not attempt if the request itself was /auth/refresh
+     * - Do not retry endlessly
+     */
+    if (status === 401 && !original?._retry && !isAuthRefreshEndpoint(url)) {
       original._retry = true;
 
       try {
@@ -72,6 +129,7 @@ http.interceptors.response.use(
         return http(original);
       } catch {
         setAccessToken(null);
+        return Promise.reject(err);
       }
     }
 

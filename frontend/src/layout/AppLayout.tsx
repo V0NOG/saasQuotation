@@ -1,11 +1,31 @@
+// AppLayout.tsx
+import { useEffect } from "react";
 import { SidebarProvider, useSidebar } from "../context/SidebarContext";
-import { Outlet } from "react-router";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import AppHeader from "./AppHeader";
 import Backdrop from "./Backdrop";
 import AppSidebar from "./AppSidebar";
 
 const LayoutContent: React.FC = () => {
   const { isExpanded, isHovered, isMobileOpen } = useSidebar();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    function onBillingRequired(e: Event) {
+      // Avoid loops / weird redirects
+      if (location.pathname === "/billing") return;
+      if (location.pathname.startsWith("/signin")) return;
+
+      navigate("/billing", {
+        replace: true,
+        state: { from: location.pathname, reason: "billing_required" },
+      });
+    }
+
+    window.addEventListener("billing:required", onBillingRequired);
+    return () => window.removeEventListener("billing:required", onBillingRequired);
+  }, [navigate, location.pathname]);
 
   return (
     <div className="min-h-screen xl:flex">

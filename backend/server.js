@@ -6,9 +6,6 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
 const passport = require("passport");
-const userRoutes = require("./routes/user.routes");
-const billingRoutes = require("./routes/billing.routes");
-const stripeWebhookRoutes = require("./routes/stripe.webhook");
 
 const { connectDB } = require("./config/db");
 require("./config/passport");
@@ -19,8 +16,10 @@ const orgRoutes = require("./routes/org.routes");
 const customerRoutes = require("./routes/customer.routes");
 const pricebookRoutes = require("./routes/pricebook.routes");
 const quoteRoutes = require("./routes/quote.routes");
-
+const billingRoutes = require("./routes/billing.routes");
+const stripeWebhookRoutes = require("./routes/stripe.webhook");
 const publicQuoteRoutes = require("./routes/publicQuote.routes");
+const userRoutes = require("./routes/user.routes");
 
 const app = express();
 
@@ -31,7 +30,16 @@ if (process.env.NODE_ENV === "production") {
 
 app.use(helmet());
 app.use(morgan("dev"));
+
+/**
+ * ✅ Stripe webhooks MUST use raw body, and must be mounted BEFORE express.json()
+ * Do NOT put express.json() before this.
+ */
 app.use("/api/webhooks", express.raw({ type: "application/json" }), stripeWebhookRoutes);
+
+/**
+ * ✅ JSON + cookies for all non-webhook routes
+ */
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
 
@@ -49,13 +57,17 @@ app.use(
       // allow non-browser requests (curl/postman/no origin)
       if (!origin) return cb(null, true);
 
-      if (allowedOrigins.length === 0) return cb(new Error("CORS not configured"), false);
+      // If not configured, fail CLOSED but with a clean error
+      if (allowedOrigins.length === 0) return cb(null, false);
 
       if (allowedOrigins.includes(origin)) return cb(null, true);
-      return cb(new Error("Not allowed by CORS"), false);
+      return cb(null, false);
     },
   })
 );
+
+// ✅ Make preflight predictable (helps with cookies + credentials)
+app.options("*", cors({ credentials: true, origin: allowedOrigins }));
 
 app.use(passport.initialize());
 
@@ -69,7 +81,9 @@ app.use("/api/pricebook", pricebookRoutes);
 app.use("/api/quotes", quoteRoutes);
 app.use("/api/billing", billingRoutes);
 
-// ✅ Public routes (add lightweight rate limit just for public endpoints)
+/**
+ * ✅ Public routes (add lightweight rate limit just for public endpoints)
+ */
 function createRateLimiter({ windowMs, max, keyFn }) {
   const hits = new Map(); // key -> { count, resetAt }
   return function rateLimit(req, res, next) {
@@ -104,8 +118,8 @@ const publicLimiter = createRateLimiter({
 
 app.use("/api/public", publicLimiter, publicQuoteRoutes);
 
-app.use("/api/users", require("./routes/user.routes"));
-app.use("/api/user", userRoutes);
+// ✅ Keep ONE user route mount (avoid duplicates)
+app.use("/api/users", userRoutes);
 
 const port = process.env.PORT || 5050;
 

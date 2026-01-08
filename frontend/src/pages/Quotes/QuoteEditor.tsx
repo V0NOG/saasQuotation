@@ -286,6 +286,12 @@ export default function QuoteEditor() {
 
       alert("Quote sent and emailed! Public link is now available.");
     } catch (e: any) {
+      const status = e?.response?.status;
+      if (status === 402) {
+        alert("Subscription required to create/send/email/download quotes. Please activate billing.");
+        navigate("/billing");
+        return;
+      }
       alert(e?.response?.data?.message || "Could not send/email quote.");
     } finally {
       setSendEmailLoading(false);

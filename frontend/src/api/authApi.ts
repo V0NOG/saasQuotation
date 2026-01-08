@@ -32,8 +32,8 @@ export const authApi = {
     return data;
   },
 
-  async createCheckoutSession(plan: "starter" | "pro") {
-    const { data } = await http.post<{ url: string }>("/billing/checkout", { plan });
+  async createCheckoutSession(input: { plan: "starter" | "pro"; trial?: boolean }) {
+    const { data } = await http.post<{ url: string }>("/billing/checkout", input);
     return data;
   },
 
@@ -52,7 +52,6 @@ export const authApi = {
     return true;
   },
 
-  // ✅ NEW: hydrate current user from access token
   async me() {
     const { data } = await http.get<{ user: AuthUser }>("/auth/me");
     return data.user;

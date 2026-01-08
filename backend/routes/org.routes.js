@@ -18,18 +18,35 @@ router.get("/me", requireAuth, async (req, res) => {
 
 router.get("/billing", requireAuth, async (req, res) => {
   try {
-    const org = await Org.findById(req.user.orgId).select("name currency taxRate branding industry billing");
+    const org = await Org.findById(req.user.orgId).select("billing name currency taxRate branding");
     if (!org) return res.status(404).json({ message: "Org not found" });
 
+    // ✅ IMPORTANT: return the actual stored billing values, not a schema definition
+    const billing = org.billing || {
+      plan: "free",
+      status: "free",
+      trialEndsAt: null,
+      stripeCustomerId: "",
+      stripeSubscriptionId: "",
+      currentPeriodEnd: null,
+    };
+
     return res.json({
-      billing: org.billing || null,
       org: {
         id: org._id,
         name: org.name,
         currency: org.currency,
         taxRate: org.taxRate,
         branding: org.branding,
-        industry: org.industry,
+      },
+      billing: {
+        plan: billing.plan || "free",
+        status: billing.status || "free",
+        trialEndsAt: billing.trialEndsAt || null,
+        currentPeriodEnd: billing.currentPeriodEnd || null,
+        // you can include these if you want (optional)
+        stripeCustomerId: billing.stripeCustomerId || "",
+        stripeSubscriptionId: billing.stripeSubscriptionId || "",
       },
     });
   } catch (e) {
@@ -42,7 +59,6 @@ router.patch("/me", requireAuth, async (req, res) => {
   try {
     const updates = req.body || {};
 
-    // allow updating currency + branding
     const allowed = {};
     if (typeof updates.currency === "string") allowed.currency = updates.currency;
     if (typeof updates.taxRate === "number") allowed.taxRate = updates.taxRate;

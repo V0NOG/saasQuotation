@@ -58,7 +58,7 @@ router.post("/stripe", async (req, res) => {
       else if (status === "trialing") org.billing.status = "trialing";
       else if (status === "past_due" || status === "unpaid") org.billing.status = "past_due";
       else if (status === "canceled") org.billing.status = "canceled";
-      else org.billing.status = "active";
+      else org.billing.status = "free"; // ✅ safest fallback
 
       if (subscription.current_period_end) {
         org.billing.currentPeriodEnd = new Date(subscription.current_period_end * 1000);

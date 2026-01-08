@@ -82,61 +82,117 @@ function makeIdempotencyKey(prefix: string, id: string) {
   return `${prefix}-${id}-${Date.now()}`;
 }
 
+/**
+ * ✅ Centralised error shape for Quote API calls
+ * Keeps UI logic simple and avoids uncaught AxiosErrors.
+ */
+export type QuoteApiError = Error & {
+  code?: number;
+  data?: any;
+  isPaymentRequired?: boolean; // true when HTTP 402
+};
+
+function toQuoteApiError(e: any, fallbackMessage: string): QuoteApiError {
+  const status = e?.response?.status;
+  const message =
+    e?.response?.data?.message ||
+    e?.message ||
+    fallbackMessage;
+
+  const err = new Error(message) as QuoteApiError;
+  err.code = typeof status === "number" ? status : undefined;
+  err.data = e?.response?.data;
+  err.isPaymentRequired = status === 402;
+  return err;
+}
+
+async function wrap<T>(fn: () => Promise<T>, fallbackMessage: string): Promise<T> {
+  try {
+    return await fn();
+  } catch (e: any) {
+    throw toQuoteApiError(e, fallbackMessage);
+  }
+}
+
 export const quoteApi = {
+  // ✅ helper so UI can do: if (quoteApi.isPaymentRequiredError(e)) ...
+  isPaymentRequiredError(e: any): boolean {
+    return Boolean(e?.isPaymentRequired || e?.code === 402);
+  },
+
   async list(params: { search?: string; status?: QuoteStatus | ""; page?: number; limit?: number }) {
-    const { data } = await http.get<QuoteListResponse>("/quotes", { params });
-    return data;
+    return wrap(async () => {
+      const { data } = await http.get<QuoteListResponse>("/quotes", { params });
+      return data;
+    }, "Could not load quotes.");
   },
 
   async create(payload: Partial<Quote>) {
-    const { data } = await http.post<{ quote: Quote }>("/quotes", payload);
-    return data.quote;
+    return wrap(async () => {
+      const { data } = await http.post<{ quote: Quote }>("/quotes", payload);
+      return data.quote;
+    }, "Could not create quote.");
   },
 
   async getById(id: string) {
-    const { data } = await http.get<{ quote: Quote }>(`/quotes/${id}`);
-    return data.quote;
+    return wrap(async () => {
+      const { data } = await http.get<{ quote: Quote }>(`/quotes/${id}`);
+      return data.quote;
+    }, "Could not load quote.");
   },
 
   async update(id: string, payload: Partial<Quote>) {
-    const { data } = await http.patch<{ quote: Quote }>(`/quotes/${id}`, payload);
-    return data.quote;
+    return wrap(async () => {
+      const { data } = await http.patch<{ quote: Quote }>(`/quotes/${id}`, payload);
+      return data.quote;
+    }, "Could not update quote.");
   },
 
   async remove(id: string) {
-    const { data } = await http.delete<{ ok: boolean }>(`/quotes/${id}`);
-    return data.ok;
+    return wrap(async () => {
+      const { data } = await http.delete<{ ok: boolean }>(`/quotes/${id}`);
+      return data.ok;
+    }, "Could not delete quote.");
   },
 
   async email(id: string, payload?: EmailQuotePayload, opts?: { idempotencyKey?: string }) {
     const idempotencyKey = opts?.idempotencyKey || makeIdempotencyKey("quote-email", id);
 
-    const { data } = await http.post<EmailQuoteResponse>(
-      `/quotes/${id}/email`,
-      payload || {},
-      { headers: { "Idempotency-Key": idempotencyKey } }
-    );
-
-    return data;
+    return wrap(async () => {
+      const { data } = await http.post<EmailQuoteResponse>(
+        `/quotes/${id}/email`,
+        payload || {},
+        { headers: { "Idempotency-Key": idempotencyKey } }
+      );
+      return data;
+    }, "Could not email quote.");
   },
 
   async send(id: string) {
-    const { data } = await http.post<{ quote: Quote }>(`/quotes/${id}/send`);
-    return data.quote;
+    return wrap(async () => {
+      const { data } = await http.post<{ quote: Quote }>(`/quotes/${id}/send`);
+      return data.quote;
+    }, "Could not send quote.");
   },
 
   async getPublic(token: string) {
-    const { data } = await http.get<PublicQuoteResponse>(`/public/quotes/${token}`);
-    return data.quote;
+    return wrap(async () => {
+      const { data } = await http.get<PublicQuoteResponse>(`/public/quotes/${token}`);
+      return data.quote;
+    }, "Could not load public quote.");
   },
 
   async acceptPublic(token: string) {
-    const { data } = await http.post<{ quote: Quote }>(`/public/quotes/${token}/accept`);
-    return data.quote;
+    return wrap(async () => {
+      const { data } = await http.post<{ quote: Quote }>(`/public/quotes/${token}/accept`);
+      return data.quote;
+    }, "Could not accept quote.");
   },
 
   async declinePublic(token: string) {
-    const { data } = await http.post<{ quote: Quote }>(`/public/quotes/${token}/decline`);
-    return data.quote;
+    return wrap(async () => {
+      const { data } = await http.post<{ quote: Quote }>(`/public/quotes/${token}/decline`);
+      return data.quote;
+    }, "Could not decline quote.");
   },
 };

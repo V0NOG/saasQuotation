@@ -1,3 +1,4 @@
+// backend/routes/billing.routes.js
 const express = require("express");
 const Org = require("../models/Org");
 const { requireAuth } = require("../middleware/auth");
@@ -30,13 +31,14 @@ async function getOrCreateCustomer(org) {
 
 /**
  * POST /api/billing/checkout
- * body: { plan: "starter" | "pro" }
+ * body: { plan: "starter" | "pro", trial?: boolean }
  */
 router.post("/checkout", requireAuth, async (req, res) => {
   try {
-    const { plan } = req.body || {};
-    const priceId =
-      plan === "pro" ? process.env.STRIPE_PRICE_PRO : process.env.STRIPE_PRICE_STARTER;
+    const { plan, trial } = req.body || {};
+
+    const isPro = plan === "pro";
+    const priceId = isPro ? process.env.STRIPE_PRICE_PRO : process.env.STRIPE_PRICE_STARTER;
 
     if (!priceId) {
       return res.status(400).json({ message: "Stripe price id not configured for plan" });
@@ -47,16 +49,24 @@ router.post("/checkout", requireAuth, async (req, res) => {
 
     const customerId = await getOrCreateCustomer(org);
 
+    // ✅ Only allow trial on starter (you can change this later)
+    const wantsTrial = Boolean(trial) && !isPro;
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
 
-      // important for webhook mapping
+      // ✅ Card collected up-front
+      payment_method_collection: "always",
+
+      subscription_data: wantsTrial ? { trial_period_days: 7 } : undefined,
+
       metadata: {
         orgId: String(org._id),
         plan: planFromPrice(priceId),
+        trial: wantsTrial ? "true" : "false",
       },
 
       success_url: `${FRONTEND_URL}/billing?success=1`,
@@ -72,7 +82,6 @@ router.post("/checkout", requireAuth, async (req, res) => {
 
 /**
  * POST /api/billing/portal
- * returns Stripe customer portal URL
  */
 router.post("/portal", requireAuth, async (req, res) => {
   try {

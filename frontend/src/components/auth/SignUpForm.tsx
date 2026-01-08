@@ -37,6 +37,8 @@ function GoogleIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+type SignupBillingChoice = "trial" | "pay_now" | "skip";
+
 export default function SignUpForm() {
   const navigate = useNavigate();
   const { setUser, setOrg } = useAuth();
@@ -50,6 +52,10 @@ export default function SignUpForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
 
+  // ✅ Billing choices
+  const [billingChoice, setBillingChoice] = useState<SignupBillingChoice>("trial");
+  const [planChoice, setPlanChoice] = useState<"starter" | "pro">("starter");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,7 +67,6 @@ export default function SignUpForm() {
       setError("Please fill in all required fields.");
       return;
     }
-
     if (!acceptTerms) {
       setError("Please accept the Terms and Conditions.");
       return;
@@ -81,7 +86,19 @@ export default function SignUpForm() {
       setUser(user);
       setOrg(org ?? null);
 
-      navigate("/", { replace: true });
+      // ✅ Decide what to do next
+      if (billingChoice === "skip") {
+        navigate("/", { replace: true });
+        return;
+      }
+
+      // go to Stripe Checkout
+      const { url } = await authApi.createCheckoutSession({
+        plan: planChoice,
+        trial: billingChoice === "trial" && planChoice === "starter",
+      });
+
+      window.location.href = url;
     } catch (err: any) {
       setError(err?.response?.data?.message || "Sign up failed. Please try again.");
     } finally {
@@ -91,7 +108,6 @@ export default function SignUpForm() {
 
   return (
     <div className="flex flex-col flex-1">
-      {/* match SignIn spacing */}
       <div className="w-full max-w-md pt-10 mx-auto">
         <Link
           to="/"
@@ -113,7 +129,6 @@ export default function SignUpForm() {
             </p>
           </div>
 
-          {/* OAuth buttons (Google only) */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <button
               type="button"
@@ -123,8 +138,6 @@ export default function SignUpForm() {
               <GoogleIcon />
               Sign up with Google
             </button>
-
-            {/* removed X/Twitter */}
           </div>
 
           <div className="relative py-4">
@@ -132,9 +145,7 @@ export default function SignUpForm() {
               <div className="w-full border-t border-gray-200 dark:border-gray-800" />
             </div>
             <div className="relative flex justify-center">
-              <span className="px-4 text-sm text-gray-400 bg-white dark:bg-gray-900">
-                Or
-              </span>
+              <span className="px-4 text-sm text-gray-400 bg-white dark:bg-gray-900">Or</span>
             </div>
           </div>
 
@@ -147,41 +158,24 @@ export default function SignUpForm() {
           <form onSubmit={onSubmit} className="space-y-5">
             <div>
               <Label>Business / Org Name</Label>
-              <Input
-                value={orgName}
-                onChange={(e) => setOrgName((e.target as HTMLInputElement).value)}
-              />
+              <Input value={orgName} onChange={(e) => setOrgName((e.target as HTMLInputElement).value)} />
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <Label>First name</Label>
-                <Input
-                  value={firstName}
-                  onChange={(e) =>
-                    setFirstName((e.target as HTMLInputElement).value)
-                  }
-                />
+                <Input value={firstName} onChange={(e) => setFirstName((e.target as HTMLInputElement).value)} />
               </div>
 
               <div>
                 <Label>Last name</Label>
-                <Input
-                  value={lastName}
-                  onChange={(e) =>
-                    setLastName((e.target as HTMLInputElement).value)
-                  }
-                />
+                <Input value={lastName} onChange={(e) => setLastName((e.target as HTMLInputElement).value)} />
               </div>
             </div>
 
             <div>
               <Label>Email</Label>
-              <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail((e.target as HTMLInputElement).value)}
-              />
+              <Input type="email" value={email} onChange={(e) => setEmail((e.target as HTMLInputElement).value)} />
             </div>
 
             <div>
@@ -190,9 +184,7 @@ export default function SignUpForm() {
                 <Input
                   type={showPassword ? "text" : "password"}
                   value={password}
-                  onChange={(e) =>
-                    setPassword((e.target as HTMLInputElement).value)
-                  }
+                  onChange={(e) => setPassword((e.target as HTMLInputElement).value)}
                 />
                 <span
                   onClick={() => setShowPassword(!showPassword)}
@@ -203,7 +195,62 @@ export default function SignUpForm() {
               </div>
             </div>
 
-            {/* ✅ Terms checkbox visible + aligned */}
+            {/* ✅ Billing choice section */}
+            <div className="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+              <div className="mb-3 text-sm font-semibold text-gray-800 dark:text-white/90">Billing</div>
+
+              <div className="mb-3 grid grid-cols-1 gap-2">
+                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                  <input
+                    type="radio"
+                    name="billingChoice"
+                    checked={billingChoice === "trial"}
+                    onChange={() => setBillingChoice("trial")}
+                  />
+                  Start 7-day free trial (Starter only, card required)
+                </label>
+
+                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                  <input
+                    type="radio"
+                    name="billingChoice"
+                    checked={billingChoice === "pay_now"}
+                    onChange={() => setBillingChoice("pay_now")}
+                  />
+                  Subscribe now (pay immediately)
+                </label>
+
+                <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                  <input
+                    type="radio"
+                    name="billingChoice"
+                    checked={billingChoice === "skip"}
+                    onChange={() => setBillingChoice("skip")}
+                  />
+                  Skip for now (Free)
+                </label>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Plan:</span>
+                <select
+                  className="h-[44px] rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-brand-500 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
+                  value={planChoice}
+                  onChange={(e) => setPlanChoice(e.target.value as any)}
+                  disabled={billingChoice === "skip"}
+                >
+                  <option value="starter">Starter</option>
+                  <option value="pro">Pro</option>
+                </select>
+              </div>
+
+              {billingChoice === "trial" && planChoice === "pro" ? (
+                <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                  Trial is only available on Starter. Switch plan to Starter or choose “Subscribe now”.
+                </div>
+              ) : null}
+            </div>
+
             <div className="flex items-center gap-2">
               <Checkbox checked={acceptTerms} onChange={setAcceptTerms} />
               <span className="text-sm text-gray-600 dark:text-gray-400">

@@ -32,7 +32,7 @@ function isLocked(quote) {
 }
 
 // GET /api/quotes
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAuth, requireActiveBilling("starter"), async (req, res) => {
   try {
     const orgId = req.user.orgId;
 
@@ -69,7 +69,7 @@ router.get("/", requireAuth, async (req, res) => {
 });
 
 // GET /api/quotes/:id
-router.get("/:id", requireAuth, async (req, res) => {
+router.get("/:id", requireAuth, requireActiveBilling("starter"), async (req, res) => {
   try {
     if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid quote id" });
 
@@ -84,7 +84,7 @@ router.get("/:id", requireAuth, async (req, res) => {
 });
 
 // GET /api/quotes/:id/pdf
-router.get("/:id/pdf", requireAuth, async (req, res) => {
+router.get("/:id/pdf", requireAuth, requireActiveBilling("starter"), async (req, res) => {
   try {
     if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid quote id" });
 
@@ -101,7 +101,7 @@ router.get("/:id/pdf", requireAuth, async (req, res) => {
 });
 
 // POST /api/quotes
-router.post("/", requireAuth, async (req, res) => {
+router.post("/", requireAuth, requireActiveBilling("starter"), async (req, res) => {
   try {
     const orgId = req.user.orgId;
     const org = await Org.findById(orgId).select("taxRate");
@@ -176,7 +176,7 @@ router.post("/", requireAuth, async (req, res) => {
 });
 
 // POST /api/quotes/:id/send (auth, org-scoped, idempotent-ish)
-router.post("/:id/send", requireAuth, async (req, res) => {
+router.post("/:id/send", requireAuth, requireActiveBilling("starter"), async (req, res) => {
   try {
     if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid quote id" });
 
@@ -229,7 +229,7 @@ router.post("/:id/send", requireAuth, async (req, res) => {
 // body: { to?: string, message?: string, attachPdf?: boolean }
 // Idempotency via header: Idempotency-Key
 // POST /api/quotes/:id/email
-router.post("/:id/email", requireAuth, async (req, res) => {
+router.post("/:id/email", requireAuth, requireActiveBilling("starter"), async (req, res) => {
   try {
     if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid quote id" });
 
@@ -320,7 +320,7 @@ router.post("/:id/email", requireAuth, async (req, res) => {
 });
 
 // PATCH /api/quotes/:id
-router.patch("/:id", requireAuth, async (req, res) => {
+router.patch("/:id", requireAuth, requireActiveBilling("starter"), async (req, res) => {
   try {
     if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid quote id" });
 
@@ -372,7 +372,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
 });
 
 // DELETE /api/quotes/:id
-router.delete("/:id", requireAuth, async (req, res) => {
+router.delete("/:id", requireAuth, requireActiveBilling("starter"), async (req, res) => {
   try {
     if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid quote id" });
 

@@ -7,9 +7,7 @@ import Button from "../../components/ui/button/Button";
 import { quoteApi, type Quote, type QuoteStatus } from "../../api/quoteApi";
 
 function StatusBadge({ status }: { status: QuoteStatus }) {
-  const base =
-    "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold";
-
+  const base = "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold";
   if (status === "draft") return <span className={`${base} bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200`}>Draft</span>;
   if (status === "sent") return <span className={`${base} bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200`}>Sent</span>;
   if (status === "accepted") return <span className={`${base} bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-200`}>Accepted</span>;
@@ -21,7 +19,6 @@ async function copyToClipboard(text: string) {
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
-    // fallback
     const ta = document.createElement("textarea");
     ta.value = text;
     ta.style.position = "fixed";
@@ -45,12 +42,28 @@ export default function QuotesList() {
   const [loading, setLoading] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
 
+  // ✅ new: billing gate banner
+  const [billingRequired, setBillingRequired] = useState<{ message: string } | null>(null);
+
   async function load() {
     setLoading(true);
+    setBillingRequired(null);
+
     try {
       const res = await quoteApi.list({ search, status, page, limit });
       setItems(res.items);
       setTotalPages(res.totalPages);
+    } catch (err: any) {
+      const code = err?.response?.status;
+      if (code === 402) {
+        setItems([]);
+        setTotalPages(1);
+        setBillingRequired({
+          message: err?.response?.data?.message || "Subscription required to access Quotes.",
+        });
+        return;
+      }
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -100,11 +113,21 @@ export default function QuotesList() {
     <div>
       <PageBreadCrumb title="Quotes" breadCrumb={[{ label: "Quotes" }]} />
 
+      {billingRequired ? (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>{billingRequired.message}</div>
+            <Link to="/billing">
+              <Button>Go to Billing</Button>
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
       <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex w-full flex-col gap-3 md:max-w-2xl md:flex-row">
             <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search quote #, customer…" />
-
             <select
               className="h-[44px] rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-brand-500 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
               value={status}
@@ -119,7 +142,7 @@ export default function QuotesList() {
           </div>
 
           <Link to="/quotes/new">
-            <Button>Create Quote</Button>
+            <Button disabled={!!billingRequired}>Create Quote</Button>
           </Link>
         </div>
 
@@ -142,7 +165,9 @@ export default function QuotesList() {
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-sm text-gray-600 dark:text-gray-300">No quotes found.</td>
+                  <td colSpan={5} className="px-4 py-6 text-sm text-gray-600 dark:text-gray-300">
+                    {billingRequired ? "Upgrade required to view quotes." : "No quotes found."}
+                  </td>
                 </tr>
               ) : (
                 items.map((q) => (
@@ -152,11 +177,7 @@ export default function QuotesList() {
                         {q.quoteNumber}
                       </Link>
                       {q.title ? <div className="text-xs text-gray-500">{q.title}</div> : null}
-                      {q.publicToken ? (
-                        <div className="mt-1 text-xs text-gray-500">
-                          Public link available
-                        </div>
-                      ) : null}
+                      {q.publicToken ? <div className="mt-1 text-xs text-gray-500">Public link available</div> : null}
                     </td>
 
                     <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
@@ -174,10 +195,7 @@ export default function QuotesList() {
 
                     <td className="px-4 py-3 text-right">
                       <div className="inline-flex flex-wrap justify-end gap-2">
-                        <Link
-                          to={`/quotes/${q._id}`}
-                          className="rounded-lg px-3 py-1 text-sm text-brand-600 hover:bg-brand-50 dark:hover:bg-gray-800"
-                        >
+                        <Link to={`/quotes/${q._id}`} className="rounded-lg px-3 py-1 text-sm text-brand-600 hover:bg-brand-50 dark:hover:bg-gray-800">
                           {q.status === "accepted" ? "View" : "Edit"}
                         </Link>
 
@@ -216,18 +234,12 @@ export default function QuotesList() {
         </div>
 
         <div className="mt-4 flex items-center justify-between">
-          <p className="text-sm text-gray-600 dark:text-gray-300">
-            Page {page} of {totalPages}
-          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-300">Page {page} of {totalPages}</p>
           <div className="flex items-center gap-2">
             <Button variant="outline" disabled={page <= 1} onClick={() => setPage((p) => Math.max(p - 1, 1))}>
               Prev
             </Button>
-            <Button
-              variant="outline"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-            >
+            <Button variant="outline" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(p + 1, totalPages))}>
               Next
             </Button>
           </div>
