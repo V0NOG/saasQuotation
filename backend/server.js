@@ -20,6 +20,7 @@ const billingRoutes = require("./routes/billing.routes");
 const stripeWebhookRoutes = require("./routes/stripe.webhook");
 const publicQuoteRoutes = require("./routes/publicQuote.routes");
 const userRoutes = require("./routes/user.routes");
+const jobRoutes = require("./routes/job.routes");
 
 const app = express();
 
@@ -80,6 +81,7 @@ app.use("/api/customers", customerRoutes);
 app.use("/api/pricebook", pricebookRoutes);
 app.use("/api/quotes", quoteRoutes);
 app.use("/api/billing", billingRoutes);
+app.use("/api/jobs", jobRoutes);
 
 /**
  * ✅ Public routes (add lightweight rate limit just for public endpoints)

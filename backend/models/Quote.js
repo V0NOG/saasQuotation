@@ -102,6 +102,9 @@ const QuoteSchema = new mongoose.Schema(
 
     lockedAt: { type: Date, default: null },
 
+    // Link to generated job (created on acceptance)
+    jobId: { type: mongoose.Schema.Types.ObjectId, ref: "Job", default: null },
+
     statusHistory: { type: [QuoteStatusHistorySchema], default: [] },
 
     emailHistory: { type: [QuoteEmailHistorySchema], default: [] },
