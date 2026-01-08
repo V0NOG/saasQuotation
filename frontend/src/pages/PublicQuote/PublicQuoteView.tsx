@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import Button from "../../components/ui/button/Button";
 import PageMeta from "../../components/common/PageMeta";
+import Input from "../../components/form/input/InputField";
 import { quoteApi, type Quote } from "../../api/quoteApi";
 
 function money(n: number) {
@@ -17,6 +18,11 @@ export default function PublicQuoteView() {
 
   const [acting, setActing] = useState<"accept" | "decline" | null>(null);
 
+  // ✅ identity fields (optional but recommended)
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [note, setNote] = useState("");
+
   const canAct = useMemo(() => {
     return quote?.status === "sent";
   }, [quote?.status]);
@@ -30,7 +36,13 @@ export default function PublicQuoteView() {
       setError(null);
       try {
         const q = await quoteApi.getPublic(token);
-        if (!cancelled) setQuote(q);
+        if (cancelled) return;
+
+        setQuote(q);
+
+        // helpful defaults
+        setName(q.customerSnapshot?.name || "");
+        setEmail(q.customerSnapshot?.email || "");
       } catch (e: any) {
         if (!cancelled) setError(e?.response?.data?.message || "This quote link is invalid or expired.");
       } finally {
@@ -46,9 +58,21 @@ export default function PublicQuoteView() {
 
   async function doAccept() {
     if (!token || !canAct) return;
+
+    // lightweight guard: require at least a name OR email (helps audit trails)
+    const hasIdentity = name.trim() || email.trim();
+    if (!hasIdentity) {
+      alert("Please enter your name or email before accepting.");
+      return;
+    }
+
     setActing("accept");
     try {
-      const q = await quoteApi.acceptPublic(token);
+      const q = await quoteApi.acceptPublic(token, {
+        name: name.trim() || undefined,
+        email: email.trim() || undefined,
+        note: note.trim() || undefined,
+      });
       setQuote(q);
     } catch (e: any) {
       alert(e?.response?.data?.message || "Could not accept quote.");
@@ -59,9 +83,20 @@ export default function PublicQuoteView() {
 
   async function doDecline() {
     if (!token || !canAct) return;
+
+    const hasIdentity = name.trim() || email.trim();
+    if (!hasIdentity) {
+      alert("Please enter your name or email before declining.");
+      return;
+    }
+
     setActing("decline");
     try {
-      const q = await quoteApi.declinePublic(token);
+      const q = await quoteApi.declinePublic(token, {
+        name: name.trim() || undefined,
+        email: email.trim() || undefined,
+        note: note.trim() || undefined,
+      });
       setQuote(q);
     } catch (e: any) {
       alert(e?.response?.data?.message || "Could not decline quote.");
@@ -98,27 +133,18 @@ export default function PublicQuoteView() {
               <>
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                      {quote.quoteNumber}
-                    </div>
-                    {quote.title ? (
-                      <div className="text-sm text-gray-600 dark:text-gray-300">{quote.title}</div>
-                    ) : null}
+                    <div className="text-lg font-semibold text-gray-900 dark:text-white">{quote.quoteNumber}</div>
+                    {quote.title ? <div className="text-sm text-gray-600 dark:text-gray-300">{quote.title}</div> : null}
                   </div>
 
                   <div className="text-sm text-gray-600 dark:text-gray-300">
-                    Status:{" "}
-                    <span className="font-semibold text-gray-900 dark:text-white">
-                      {quote.status}
-                    </span>
+                    Status: <span className="font-semibold text-gray-900 dark:text-white">{quote.status}</span>
                   </div>
                 </div>
 
                 <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/40">
                   <div className="text-sm font-semibold text-gray-900 dark:text-white">Customer</div>
-                  <div className="mt-1 text-sm text-gray-700 dark:text-gray-300">
-                    {quote.customerSnapshot?.name || "—"}
-                  </div>
+                  <div className="mt-1 text-sm text-gray-700 dark:text-gray-300">{quote.customerSnapshot?.name || "—"}</div>
                   {quote.customerSnapshot?.email ? (
                     <div className="text-sm text-gray-700 dark:text-gray-300">{quote.customerSnapshot.email}</div>
                   ) : null}
@@ -129,6 +155,29 @@ export default function PublicQuoteView() {
                     <div className="mt-1 text-xs text-gray-500">{quote.customerSnapshot.address}</div>
                   ) : null}
                 </div>
+
+                {/* ✅ Identity confirmation block */}
+                {canAct ? (
+                  <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                    <div className="text-sm font-semibold text-gray-900 dark:text-white">Confirm your details</div>
+                    <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name (recommended)" />
+                      <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Your email (recommended)" />
+                      <div className="md:col-span-2">
+                        <textarea
+                          className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:border-brand-500 dark:border-gray-800 dark:bg-gray-900 dark:text-white"
+                          rows={3}
+                          value={note}
+                          onChange={(e) => setNote(e.target.value)}
+                          placeholder="Note (optional) — e.g. preferred start date, access instructions, questions…"
+                        />
+                      </div>
+                      <div className="md:col-span-2 text-xs text-gray-500">
+                        We record your name/email, IP and browser info as part of the acceptance audit trail.
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full table-auto">
@@ -150,7 +199,7 @@ export default function PublicQuoteView() {
                           <td className="px-3 py-3 text-sm text-gray-700 dark:text-gray-300">{l.quantity}</td>
                           <td className="px-3 py-3 text-sm text-gray-700 dark:text-gray-300">{money(l.unitPriceExTax)}</td>
                           <td className="px-3 py-3 text-right text-sm text-gray-700 dark:text-gray-300">
-                            {money((l.lineTotalIncTax ?? 0))}
+                            {money(l.lineTotalIncTax ?? 0)}
                           </td>
                         </tr>
                       ))}
@@ -161,9 +210,7 @@ export default function PublicQuoteView() {
                 {quote.notes ? (
                   <div className="mt-4">
                     <div className="text-sm font-semibold text-gray-900 dark:text-white">Notes</div>
-                    <div className="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">
-                      {quote.notes}
-                    </div>
+                    <div className="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">{quote.notes}</div>
                   </div>
                 ) : null}
 
@@ -183,25 +230,16 @@ export default function PublicQuoteView() {
                 </div>
 
                 <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={doDecline}
-                    disabled={!canAct || acting !== null}
-                  >
+                  <Button variant="outline" onClick={doDecline} disabled={!canAct || acting !== null}>
                     {acting === "decline" ? "Declining..." : "Decline"}
                   </Button>
-                  <Button
-                    onClick={doAccept}
-                    disabled={!canAct || acting !== null}
-                  >
+                  <Button onClick={doAccept} disabled={!canAct || acting !== null}>
                     {acting === "accept" ? "Accepting..." : "Accept"}
                   </Button>
                 </div>
 
                 {!canAct ? (
-                  <div className="mt-3 text-xs text-gray-500">
-                    This quote can no longer be actioned (status: {quote.status}).
-                  </div>
+                  <div className="mt-3 text-xs text-gray-500">This quote can no longer be actioned (status: {quote.status}).</div>
                 ) : null}
               </>
             ) : null}

@@ -78,26 +78,18 @@ export type EmailQuoteResponse = {
 };
 
 function makeIdempotencyKey(prefix: string, id: string) {
-  // good enough for UI (unique-ish per click)
   return `${prefix}-${id}-${Date.now()}`;
 }
 
-/**
- * ✅ Centralised error shape for Quote API calls
- * Keeps UI logic simple and avoids uncaught AxiosErrors.
- */
 export type QuoteApiError = Error & {
   code?: number;
   data?: any;
-  isPaymentRequired?: boolean; // true when HTTP 402
+  isPaymentRequired?: boolean;
 };
 
 function toQuoteApiError(e: any, fallbackMessage: string): QuoteApiError {
   const status = e?.response?.status;
-  const message =
-    e?.response?.data?.message ||
-    e?.message ||
-    fallbackMessage;
+  const message = e?.response?.data?.message || e?.message || fallbackMessage;
 
   const err = new Error(message) as QuoteApiError;
   err.code = typeof status === "number" ? status : undefined;
@@ -114,8 +106,14 @@ async function wrap<T>(fn: () => Promise<T>, fallbackMessage: string): Promise<T
   }
 }
 
+// ✅ NEW: public action payload
+export type PublicActionPayload = {
+  name?: string;
+  email?: string;
+  note?: string;
+};
+
 export const quoteApi = {
-  // ✅ helper so UI can do: if (quoteApi.isPaymentRequiredError(e)) ...
   isPaymentRequiredError(e: any): boolean {
     return Boolean(e?.isPaymentRequired || e?.code === 402);
   },
@@ -159,11 +157,9 @@ export const quoteApi = {
     const idempotencyKey = opts?.idempotencyKey || makeIdempotencyKey("quote-email", id);
 
     return wrap(async () => {
-      const { data } = await http.post<EmailQuoteResponse>(
-        `/quotes/${id}/email`,
-        payload || {},
-        { headers: { "Idempotency-Key": idempotencyKey } }
-      );
+      const { data } = await http.post<EmailQuoteResponse>(`/quotes/${id}/email`, payload || {}, {
+        headers: { "Idempotency-Key": idempotencyKey },
+      });
       return data;
     }, "Could not email quote.");
   },
@@ -182,16 +178,17 @@ export const quoteApi = {
     }, "Could not load public quote.");
   },
 
-  async acceptPublic(token: string) {
+  // ✅ UPDATED: accept/decline can send identity payload
+  async acceptPublic(token: string, payload?: PublicActionPayload) {
     return wrap(async () => {
-      const { data } = await http.post<{ quote: Quote }>(`/public/quotes/${token}/accept`);
+      const { data } = await http.post<{ quote: Quote }>(`/public/quotes/${token}/accept`, payload || {});
       return data.quote;
     }, "Could not accept quote.");
   },
 
-  async declinePublic(token: string) {
+  async declinePublic(token: string, payload?: PublicActionPayload) {
     return wrap(async () => {
-      const { data } = await http.post<{ quote: Quote }>(`/public/quotes/${token}/decline`);
+      const { data } = await http.post<{ quote: Quote }>(`/public/quotes/${token}/decline`, payload || {});
       return data.quote;
     }, "Could not decline quote.");
   },

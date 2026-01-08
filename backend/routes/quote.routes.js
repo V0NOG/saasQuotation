@@ -228,7 +228,6 @@ router.post("/:id/send", requireAuth, requireActiveBilling("starter"), async (re
 // POST /api/quotes/:id/email
 // body: { to?: string, message?: string, attachPdf?: boolean }
 // Idempotency via header: Idempotency-Key
-// POST /api/quotes/:id/email
 router.post("/:id/email", requireAuth, requireActiveBilling("starter"), async (req, res) => {
   try {
     if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid quote id" });
@@ -239,20 +238,72 @@ router.post("/:id/email", requireAuth, requireActiveBilling("starter"), async (r
     const quote = await Quote.findOne({ _id: req.params.id, orgId });
     if (!quote) return res.status(404).json({ message: "Quote not found" });
 
+    // hard stops
+    if (quote.status === "accepted" || quote.lockedAt) {
+      return res.status(409).json({ message: "Quote has been accepted and is locked" });
+    }
+    if (quote.status === "declined") {
+      return res.status(409).json({ message: "Quote has been declined" });
+    }
+
     const to = String(req.body?.to || quote.customerSnapshot?.email || "").trim();
     if (!to) return res.status(400).json({ message: "Customer email is missing" });
-
-    if (!quote.publicToken) {
-      return res.status(409).json({ message: "Quote must be sent before emailing (no public link yet)" });
-    }
 
     const idemKey = String(req.headers["idempotency-key"] || "").trim();
     if (!idemKey) return res.status(400).json({ message: "Missing Idempotency-Key header" });
 
-    // fast idempotency check (non-atomic, but cheap)
+    // fast idempotency check (cheap)
     const already = (quote.emailHistory || []).find((h) => h && h.key === idemKey);
     if (already) {
       return res.json({ ok: true, duplicate: true, messageId: already.messageId || "" });
+    }
+
+    // ✅ Ensure quote is "sent" and has a publicToken BEFORE emailing.
+    // This makes email robust even if UI forgets to call /send first.
+    const now = new Date();
+
+    // Token generation can theoretically collide, so retry a few times.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if (!quote.publicToken) {
+          quote.publicToken = generatePublicToken();
+          quote.publicTokenCreatedAt = now;
+
+          if (quote.validUntil instanceof Date && !Number.isNaN(quote.validUntil.getTime())) {
+            quote.publicTokenExpiresAt = quote.validUntil;
+          }
+        }
+
+        if (quote.status !== "sent") {
+          quote.statusHistory.push({
+            from: quote.status,
+            to: "sent",
+            at: now,
+            actorType: "user",
+            actorUserId: userId,
+            meta: { ip: "", userAgent: "", note: "Auto-sent during email" },
+          });
+
+          quote.status = "sent";
+          quote.sentAt = now;
+        }
+
+        // persist "sent" state + token
+        await quote.save();
+        break;
+      } catch (e) {
+        // retry only on publicToken collision
+        if (e && e.code === 11000 && String(e.message || "").includes("publicToken")) {
+          quote.publicToken = null;
+          quote.publicTokenCreatedAt = null;
+          quote.publicTokenExpiresAt = null;
+          if (attempt === 2) {
+            return res.status(503).json({ message: "Token collision, please retry" });
+          }
+          continue;
+        }
+        throw e;
+      }
     }
 
     const appUrl = String(process.env.PUBLIC_APP_URL || process.env.FRONTEND_URL || "").replace(/\/+$/, "");
@@ -300,7 +351,6 @@ router.post("/:id/email", requireAuth, requireActiveBilling("starter"), async (r
     };
 
     // ✅ ATOMIC idempotency enforcement:
-    // Only push if this idemKey isn't already present.
     const updated = await Quote.findOneAndUpdate(
       { _id: quote._id, orgId, "emailHistory.key": { $ne: idemKey } },
       { $push: { emailHistory: historyEntry } },

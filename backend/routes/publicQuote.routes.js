@@ -15,6 +15,21 @@ function clientIp(req) {
   return xf || req.ip || "";
 }
 
+function cleanStr(v, max = 200) {
+  return String(v || "")
+    .replace(/[\r\n\t]/g, " ")
+    .trim()
+    .slice(0, max);
+}
+
+function cleanEmail(v, max = 200) {
+  const s = cleanStr(v, max).toLowerCase();
+  // lightweight sanity check (not strict RFC; good enough for audit trails)
+  if (!s) return "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) return s; // store what they gave (still useful)
+  return s;
+}
+
 // GET /api/public/quotes/:token
 router.get("/quotes/:token", async (req, res) => {
   try {
@@ -59,18 +74,15 @@ router.post("/quotes/:token/accept", async (req, res) => {
     const token = String(req.params.token || "").trim();
     if (!token) return res.status(400).json({ message: "Missing token" });
 
-    // first: fetch minimal fields for expiry/status check
     const current = await Quote.findOne({ publicToken: token }).select("status publicTokenExpiresAt");
     if (!current) return res.status(404).json({ message: "Quote not found" });
     if (isTokenExpired(current)) return res.status(410).json({ message: "Quote link expired" });
 
-    // idempotent: if already accepted, return it
     if (current.status === "accepted") {
       const q = await Quote.findOne({ publicToken: token });
       return res.json({ quote: q });
     }
 
-    // only allow accept from "sent"
     if (current.status !== "sent") {
       return res.status(409).json({ message: `Cannot accept a quote in status '${current.status}'` });
     }
@@ -78,6 +90,11 @@ router.post("/quotes/:token/accept", async (req, res) => {
     const now = new Date();
     const ip = clientIp(req);
     const ua = String(req.headers["user-agent"] || "").slice(0, 300);
+
+    // ✅ identity payload (optional)
+    const name = cleanStr(req.body?.name, 120);
+    const email = cleanEmail(req.body?.email, 200);
+    const note = cleanStr(req.body?.note, 500);
 
     const updated = await Quote.findOneAndUpdate(
       { publicToken: token, status: "sent" },
@@ -94,7 +111,7 @@ router.post("/quotes/:token/accept", async (req, res) => {
             at: now,
             actorType: "public",
             actorUserId: null,
-            meta: { ip, userAgent: ua, note: "" },
+            meta: { ip, userAgent: ua, name, email, note },
           },
         },
       },
@@ -102,7 +119,6 @@ router.post("/quotes/:token/accept", async (req, res) => {
     );
 
     if (!updated) {
-      // status changed between check and update
       const q = await Quote.findOne({ publicToken: token });
       return res.status(409).json({ message: "Quote status changed. Please refresh.", quote: q });
     }
@@ -137,6 +153,11 @@ router.post("/quotes/:token/decline", async (req, res) => {
     const ip = clientIp(req);
     const ua = String(req.headers["user-agent"] || "").slice(0, 300);
 
+    // ✅ identity payload (optional)
+    const name = cleanStr(req.body?.name, 120);
+    const email = cleanEmail(req.body?.email, 200);
+    const note = cleanStr(req.body?.note, 500);
+
     const updated = await Quote.findOneAndUpdate(
       { publicToken: token, status: "sent" },
       {
@@ -151,7 +172,7 @@ router.post("/quotes/:token/decline", async (req, res) => {
             at: now,
             actorType: "public",
             actorUserId: null,
-            meta: { ip, userAgent: ua, note: "" },
+            meta: { ip, userAgent: ua, name, email, note },
           },
         },
       },
