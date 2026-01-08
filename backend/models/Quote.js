@@ -71,7 +71,7 @@ const QuoteSchema = new mongoose.Schema(
     status: { type: String, enum: ["draft", "sent", "accepted", "declined"], default: "draft", index: true },
 
     // Public share token (unguessable)
-    publicToken: { type: String, default: null, index: true },
+    publicToken: { type: String, default: null },
     publicTokenCreatedAt: { type: Date, default: null },
     publicTokenExpiresAt: { type: Date, default: null }, // optional (null = never expires)
 

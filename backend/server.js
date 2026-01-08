@@ -18,23 +18,39 @@ const customerRoutes = require("./routes/customer.routes");
 const pricebookRoutes = require("./routes/pricebook.routes");
 const quoteRoutes = require("./routes/quote.routes");
 
-// ✅ ADD THIS
 const publicQuoteRoutes = require("./routes/publicQuote.routes");
 
 const app = express();
 
-// ✅ Optional but recommended if you ever deploy behind proxy (Railway/Render/NGINX/Lightsail LB)
-// app.set("trust proxy", 1);
+// ✅ trust proxy in production (Render/Railway/NGINX/LB)
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
 
 app.use(helmet());
 app.use(morgan("dev"));
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
 
+// ✅ CORS allowlist (supports multiple origins)
+// Use FRONTEND_URLS="http://localhost:5173,https://app.yourdomain.com"
+const allowedOrigins = String(process.env.FRONTEND_URLS || process.env.FRONTEND_URL || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL,
     credentials: true,
+    origin(origin, cb) {
+      // allow non-browser requests (curl/postman/no origin)
+      if (!origin) return cb(null, true);
+
+      if (allowedOrigins.length === 0) return cb(new Error("CORS not configured"), false);
+
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error("Not allowed by CORS"), false);
+    },
   })
 );
 
@@ -49,8 +65,40 @@ app.use("/api/customers", customerRoutes);
 app.use("/api/pricebook", pricebookRoutes);
 app.use("/api/quotes", quoteRoutes);
 
-// ✅ MOUNT PUBLIC ROUTES HERE
-app.use("/api/public", publicQuoteRoutes);
+// ✅ Public routes (add lightweight rate limit just for public endpoints)
+function createRateLimiter({ windowMs, max, keyFn }) {
+  const hits = new Map(); // key -> { count, resetAt }
+  return function rateLimit(req, res, next) {
+    const key = (keyFn ? keyFn(req) : req.ip) || "unknown";
+    const now = Date.now();
+
+    const existing = hits.get(key);
+    if (!existing || existing.resetAt <= now) {
+      hits.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+
+    existing.count += 1;
+    if (existing.count > max) {
+      const retryAfter = Math.ceil((existing.resetAt - now) / 1000);
+      res.setHeader("Retry-After", String(retryAfter));
+      return res.status(429).json({ message: "Too many requests. Please try again shortly." });
+    }
+
+    return next();
+  };
+}
+
+const publicLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 60, // 60 req/min per IP (tune later)
+  keyFn: (req) => {
+    const xf = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+    return xf || req.ip || "";
+  },
+});
+
+app.use("/api/public", publicLimiter, publicQuoteRoutes);
 
 app.use("/api/users", require("./routes/user.routes"));
 app.use("/api/user", userRoutes);
@@ -59,9 +107,7 @@ const port = process.env.PORT || 5050;
 
 connectDB(process.env.MONGODB_URI)
   .then(() => {
-    app.listen(port, () =>
-      console.log(`✅ API running on http://localhost:${port}`)
-    );
+    app.listen(port, () => console.log(`✅ API running on http://localhost:${port}`));
   })
   .catch((e) => {
     console.error("❌ Mongo connect failed", e);

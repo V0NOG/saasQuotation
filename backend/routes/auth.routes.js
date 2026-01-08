@@ -167,9 +167,19 @@ router.get(
  */
 router.get(
   "/google/callback",
+  (req, res, next) => {
+    // ✅ Always compute a safe frontend base
+    req.frontendBase =
+      (process.env.FRONTEND_URL && String(process.env.FRONTEND_URL).trim()) ||
+      "http://localhost:5173";
+    next();
+  },
   passport.authenticate("google", {
     session: false,
-    failureRedirect: `${process.env.FRONTEND_URL}/signin`,
+    // ✅ Ensure failureRedirect is absolute and never becomes relative "undefined/signin"
+    failureRedirect:
+      ((process.env.FRONTEND_URL && String(process.env.FRONTEND_URL).trim()) ||
+        "http://localhost:5173") + "/signin",
   }),
   async (req, res) => {
     try {
@@ -179,16 +189,22 @@ router.get(
       const refreshToken = signRefreshToken(user);
       setRefreshCookie(res, refreshToken);
 
-      const redirectUrl = new URL(`${process.env.FRONTEND_URL}/auth/callback`);
+      // ✅ Build URL safely even if base is missing or has trailing slashes
+      const base = req.frontendBase || "http://localhost:5173";
+      const redirectUrl = new URL("/auth/callback", base);
       redirectUrl.searchParams.set("accessToken", accessToken);
 
       return res.redirect(302, redirectUrl.toString());
     } catch (e) {
       console.error("google callback error:", e);
-      return res.redirect(`${process.env.FRONTEND_URL}/signin`);
+      const base =
+        (process.env.FRONTEND_URL && String(process.env.FRONTEND_URL).trim()) ||
+        "http://localhost:5173";
+      return res.redirect(302, base + "/signin");
     }
   }
 );
+
 
 /**
  * POST /api/auth/refresh

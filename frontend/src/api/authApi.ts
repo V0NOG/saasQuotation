@@ -37,6 +37,12 @@ export const authApi = {
     return true;
   },
 
+  // ✅ NEW: hydrate current user from access token
+  async me() {
+    const { data } = await http.get<{ user: AuthUser }>("/auth/me");
+    return data.user;
+  },
+
   async orgMe() {
     const { data } = await http.get<{ org: AuthOrg }>("/org/me");
     return data.org;

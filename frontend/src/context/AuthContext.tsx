@@ -1,6 +1,7 @@
 // frontend/src/context/AuthContext.tsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { setAccessToken } from "../api/http";
+import { authApi } from "../api/authApi"; // ✅ NEW
 
 export type SocialLinks = {
   facebook?: string;
@@ -46,11 +47,11 @@ type AuthContextValue = {
   org: AuthOrg | null;
   isAuthenticated: boolean;
 
-  // ✅ these MUST exist
   setUser: (u: AuthUser | null) => void;
   setOrg: (o: AuthOrg | null) => void;
 
-  logout: () => void;
+  // ✅ make logout async so we can clear refresh cookie on server
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -83,7 +84,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     else localStorage.removeItem(ORG_KEY);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    // 1) clear refresh cookie on server (best-effort)
+    try {
+      await authApi.logout();
+    } catch {
+      // ignore
+    }
+
+    // 2) clear access token + local cached auth
     setAccessToken(null);
     setUser(null);
     setOrg(null);

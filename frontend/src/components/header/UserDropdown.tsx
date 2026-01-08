@@ -1,3 +1,4 @@
+// UserDropdown.tsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
@@ -13,6 +14,7 @@ function getInitials(nameOrEmail?: string) {
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false); // ✅ optional nice UX
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
@@ -24,15 +26,20 @@ export default function UserDropdown() {
     setIsOpen(false);
   }
 
-  function handleLogout() {
-    logout();
-    closeDropdown();
-    navigate("/signin", { replace: true });
+  async function handleLogout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await logout();
+      closeDropdown();
+      navigate("/signin", { replace: true });
+    } finally {
+      setLoggingOut(false);
+    }
   }
 
   const displayName =
-    user?.name ||
-    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
     user?.email ||
     "Account";
 
@@ -45,7 +52,6 @@ export default function UserDropdown() {
         className="flex items-center text-gray-700 dropdown-toggle dark:text-gray-400"
         type="button"
       >
-        {/* ✅ no image - initials avatar */}
         <span className="mr-3 flex h-11 w-11 items-center justify-center rounded-full bg-gray-200 text-sm font-semibold text-gray-700 dark:bg-gray-800 dark:text-gray-200">
           {initials}
         </span>
@@ -111,9 +117,10 @@ export default function UserDropdown() {
         <button
           type="button"
           onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2 mt-3 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
+          disabled={loggingOut}
+          className="flex items-center gap-3 px-3 py-2 mt-3 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 disabled:opacity-60 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
         >
-          Sign out
+          {loggingOut ? "Signing out..." : "Sign out"}
         </button>
       </Dropdown>
     </div>

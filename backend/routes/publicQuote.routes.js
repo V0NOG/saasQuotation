@@ -22,7 +22,7 @@ router.get("/quotes/:token", async (req, res) => {
     if (!token) return res.status(400).json({ message: "Missing token" });
 
     const quote = await Quote.findOne({ publicToken: token }).select(
-      "_id quoteNumber status title notes pricingMode customerSnapshot lines subtotalExTax taxTotal totalIncTax issueDate validUntil sentAt acceptedAt declinedAt publicTokenExpiresAt lockedAt createdAt updatedAt orgId"
+      "_id quoteNumber status title notes pricingMode customerSnapshot lines subtotalExTax taxTotal totalIncTax issueDate validUntil sentAt acceptedAt declinedAt publicTokenExpiresAt lockedAt createdAt updatedAt"
     );
 
     if (!quote) return res.status(404).json({ message: "Quote not found" });
@@ -53,81 +53,117 @@ router.get("/quotes/:token/pdf", async (req, res) => {
   }
 });
 
-// POST /api/public/quotes/:token/accept
+// POST /api/public/quotes/:token/accept (ATOMIC)
 router.post("/quotes/:token/accept", async (req, res) => {
   try {
     const token = String(req.params.token || "").trim();
     if (!token) return res.status(400).json({ message: "Missing token" });
 
-    const quote = await Quote.findOne({ publicToken: token });
-    if (!quote) return res.status(404).json({ message: "Quote not found" });
-    if (isTokenExpired(quote)) return res.status(410).json({ message: "Quote link expired" });
+    // first: fetch minimal fields for expiry/status check
+    const current = await Quote.findOne({ publicToken: token }).select("status publicTokenExpiresAt");
+    if (!current) return res.status(404).json({ message: "Quote not found" });
+    if (isTokenExpired(current)) return res.status(410).json({ message: "Quote link expired" });
 
-    if (quote.status === "accepted") return res.json({ quote });
+    // idempotent: if already accepted, return it
+    if (current.status === "accepted") {
+      const q = await Quote.findOne({ publicToken: token });
+      return res.json({ quote: q });
+    }
 
-    if (quote.status !== "sent") {
-      return res.status(409).json({ message: `Cannot accept a quote in status '${quote.status}'` });
+    // only allow accept from "sent"
+    if (current.status !== "sent") {
+      return res.status(409).json({ message: `Cannot accept a quote in status '${current.status}'` });
     }
 
     const now = new Date();
     const ip = clientIp(req);
     const ua = String(req.headers["user-agent"] || "").slice(0, 300);
 
-    quote.statusHistory.push({
-      from: quote.status,
-      to: "accepted",
-      at: now,
-      actorType: "public",
-      actorUserId: null,
-      meta: { ip, userAgent: ua, note: "" },
-    });
+    const updated = await Quote.findOneAndUpdate(
+      { publicToken: token, status: "sent" },
+      {
+        $set: {
+          status: "accepted",
+          acceptedAt: now,
+          lockedAt: now,
+        },
+        $push: {
+          statusHistory: {
+            from: "sent",
+            to: "accepted",
+            at: now,
+            actorType: "public",
+            actorUserId: null,
+            meta: { ip, userAgent: ua, note: "" },
+          },
+        },
+      },
+      { new: true }
+    );
 
-    quote.status = "accepted";
-    quote.acceptedAt = now;
-    quote.lockedAt = now;
+    if (!updated) {
+      // status changed between check and update
+      const q = await Quote.findOne({ publicToken: token });
+      return res.status(409).json({ message: "Quote status changed. Please refresh.", quote: q });
+    }
 
-    await quote.save();
-    return res.json({ quote });
+    return res.json({ quote: updated });
   } catch (e) {
     console.error("public quote accept error:", e);
     return res.status(500).json({ message: "Server error" });
   }
 });
 
-// POST /api/public/quotes/:token/decline
+// POST /api/public/quotes/:token/decline (ATOMIC)
 router.post("/quotes/:token/decline", async (req, res) => {
   try {
     const token = String(req.params.token || "").trim();
     if (!token) return res.status(400).json({ message: "Missing token" });
 
-    const quote = await Quote.findOne({ publicToken: token });
-    if (!quote) return res.status(404).json({ message: "Quote not found" });
-    if (isTokenExpired(quote)) return res.status(410).json({ message: "Quote link expired" });
+    const current = await Quote.findOne({ publicToken: token }).select("status publicTokenExpiresAt");
+    if (!current) return res.status(404).json({ message: "Quote not found" });
+    if (isTokenExpired(current)) return res.status(410).json({ message: "Quote link expired" });
 
-    if (quote.status === "declined") return res.json({ quote });
+    if (current.status === "declined") {
+      const q = await Quote.findOne({ publicToken: token });
+      return res.json({ quote: q });
+    }
 
-    if (quote.status !== "sent") {
-      return res.status(409).json({ message: `Cannot decline a quote in status '${quote.status}'` });
+    if (current.status !== "sent") {
+      return res.status(409).json({ message: `Cannot decline a quote in status '${current.status}'` });
     }
 
     const now = new Date();
     const ip = clientIp(req);
     const ua = String(req.headers["user-agent"] || "").slice(0, 300);
 
-    quote.statusHistory.push({
-      from: quote.status,
-      to: "declined",
-      at: now,
-      actorType: "public",
-      actorUserId: null,
-      meta: { ip, userAgent: ua, note: "" },
-    });
+    const updated = await Quote.findOneAndUpdate(
+      { publicToken: token, status: "sent" },
+      {
+        $set: {
+          status: "declined",
+          declinedAt: now,
+        },
+        $push: {
+          statusHistory: {
+            from: "sent",
+            to: "declined",
+            at: now,
+            actorType: "public",
+            actorUserId: null,
+            meta: { ip, userAgent: ua, note: "" },
+          },
+        },
+      },
+      { new: true }
+    );
 
-    quote.status = "declined";
-    quote.declinedAt = now;
+    if (!updated) {
+      const q = await Quote.findOne({ publicToken: token });
+      return res.status(409).json({ message: "Quote status changed. Please refresh.", quote: q });
+    }
 
-    await quote.save();
-    return res.json({ quote });
+    return res.json({ quote: updated });
   } catch (e) {
     console.error("public quote decline error:", e);
     return res.status(500).json({ message: "Server error" });
