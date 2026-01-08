@@ -1,15 +1,14 @@
-// frontend/src/pages/Jobs/JobsList.tsx
+// frontend/src/pages/Jobs/JobDetail.tsx
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import PageBreadCrumb from "../../components/common/PageBreadCrumb";
-import Input from "../../components/form/input/InputField";
 import Button from "../../components/ui/button/Button";
+import Input from "../../components/form/input/InputField";
 
 import { jobsApi, type Job, type JobStatus } from "../../api/jobsApi";
 
-const STATUS_OPTIONS: { label: string; value: JobStatus | "" }[] = [
-  { label: "All", value: "" },
+const STATUS_OPTIONS: { label: string; value: JobStatus }[] = [
   { label: "Created", value: "created" },
   { label: "Scheduled", value: "scheduled" },
   { label: "In progress", value: "in_progress" },
@@ -17,257 +16,251 @@ const STATUS_OPTIONS: { label: string; value: JobStatus | "" }[] = [
   { label: "Canceled", value: "canceled" },
 ];
 
+function toLocalInputValue(d: string | null | undefined) {
+  if (!d) return "";
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return "";
+  // datetime-local expects "YYYY-MM-DDTHH:mm"
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+}
+
 function fmtMoney(n: any) {
-  const v = Number(n || 0);
-  return v.toFixed(2);
+  return Number(n || 0).toFixed(2);
 }
 
-function statusPill(status: JobStatus) {
-  const base =
-    "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border";
-  switch (status) {
-    case "created":
-      return `${base} border-gray-200 text-gray-700 dark:border-gray-700 dark:text-gray-200`;
-    case "scheduled":
-      return `${base} border-blue-200 text-blue-700 dark:border-blue-700 dark:text-blue-200`;
-    case "in_progress":
-      return `${base} border-amber-200 text-amber-700 dark:border-amber-700 dark:text-amber-200`;
-    case "completed":
-      return `${base} border-green-200 text-green-700 dark:border-green-700 dark:text-green-200`;
-    case "canceled":
-      return `${base} border-red-200 text-red-700 dark:border-red-700 dark:text-red-200`;
-    default:
-      return `${base} border-gray-200 text-gray-700`;
-  }
-}
-
-export default function JobsList() {
+export default function JobDetail() {
+  const { id } = useParams();
   const navigate = useNavigate();
-  const [sp] = useSearchParams();
 
-  const [items, setItems] = useState<Job[]>([]);
+  const bread = useMemo(() => [{ label: "Jobs", path: "/jobs" }, { label: "Job Detail" }], []);
+
+  const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const [page, setPage] = useState<number>(Number(sp.get("page") || 1));
-  const [limit] = useState<number>(20);
-
-  const [search, setSearch] = useState<string>(sp.get("search") || "");
-  const [status, setStatus] = useState<JobStatus | "">((sp.get("status") as any) || "");
-
-  const [totalPages, setTotalPages] = useState<number>(1);
-
-  // keep URL in sync (nice for refresh/back button)
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (page > 1) params.set("page", String(page));
-    if (search.trim()) params.set("search", search.trim());
-    if (status) params.set("status", status);
-    navigate({ pathname: "/jobs", search: params.toString() }, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, search, status]);
-
-  const query = useMemo(
-    () => ({ page, limit, search: search.trim() || undefined, status: status || undefined }),
-    [page, limit, search, status]
-  );
+  // editable fields
+  const [title, setTitle] = useState("");
+  const [status, setStatus] = useState<JobStatus>("created");
+  const [scheduledStart, setScheduledStart] = useState("");
+  const [scheduledEnd, setScheduledEnd] = useState("");
+  const [notes, setNotes] = useState("");
+  const [statusNote, setStatusNote] = useState("");
 
   useEffect(() => {
     let mounted = true;
-
     async function load() {
+      if (!id) return;
       setLoading(true);
       setError("");
       try {
-        const data = await jobsApi.list(query);
+        const j = await jobsApi.get(id);
         if (!mounted) return;
-        setItems(data.items || []);
-        setTotalPages(data.totalPages || 1);
+        setJob(j);
+        setTitle(j.title || "");
+        setStatus(j.status || "created");
+        setScheduledStart(toLocalInputValue(j.scheduledStart || null));
+        setScheduledEnd(toLocalInputValue(j.scheduledEnd || null));
+        setNotes(j.notes || "");
       } catch (e: any) {
-        // Billing middleware usually returns 402 => redirect to /billing
         const httpStatus = e?.response?.status;
         if (httpStatus === 402) {
           navigate("/billing");
           return;
         }
         if (!mounted) return;
-        setError(e?.response?.data?.message || "Failed to load jobs");
+        setError(e?.response?.data?.message || "Failed to load job");
       } finally {
         if (mounted) setLoading(false);
       }
     }
-
     load();
     return () => {
       mounted = false;
     };
-  }, [query, navigate]);
+  }, [id, navigate]);
+
+  async function save() {
+    if (!id) return;
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await jobsApi.update(id, {
+        title,
+        status,
+        scheduledStart: scheduledStart ? new Date(scheduledStart).toISOString() : null,
+        scheduledEnd: scheduledEnd ? new Date(scheduledEnd).toISOString() : null,
+        notes,
+        statusNote: statusNote.trim() || undefined,
+      });
+      setJob(updated);
+      setStatusNote("");
+    } catch (e: any) {
+      const httpStatus = e?.response?.status;
+      if (httpStatus === 402) {
+        navigate("/billing");
+        return;
+      }
+      setError(e?.response?.data?.message || "Failed to save job");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div>
-      <PageBreadCrumb pageTitle="Jobs" />
+      <PageBreadCrumb pageTitle="Job Detail" breadCrumb={bread as any} />
 
-      <div className="rounded-sm border border-stroke bg-white p-4 shadow-default dark:border-strokedark dark:bg-boxdark md:p-6">
-        {/* Filters */}
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-end">
-            <div className="w-full md:max-w-md">
-              <Input
-                label="Search"
-                placeholder="Job number, title, customer…"
-                value={search}
-                onChange={(e: any) => {
-                  setPage(1);
-                  setSearch(e.target.value);
-                }}
-              />
-            </div>
-
-            <div className="w-full md:max-w-xs">
-              <label className="mb-1.5 block text-sm font-medium text-black dark:text-white">
-                Status
-              </label>
-              <select
-                className="w-full rounded border border-stroke bg-transparent px-3 py-2 text-sm outline-none focus:border-primary dark:border-strokedark dark:text-white"
-                value={status}
-                onChange={(e) => {
-                  setPage(1);
-                  setStatus(e.target.value as any);
-                }}
-              >
-                {STATUS_OPTIONS.map((o) => (
-                  <option key={o.label} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+      <div className="mt-4 rounded-sm border border-stroke bg-white p-4 shadow-default dark:border-strokedark dark:bg-boxdark md:p-6">
+        {error ? (
+          <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+            {error}
           </div>
+        ) : null}
 
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setPage(1);
-                setSearch("");
-                setStatus("");
-              }}
-            >
-              Reset
-            </Button>
-          </div>
-        </div>
+        {loading ? (
+          <div className="text-sm text-gray-600 dark:text-gray-300">Loading…</div>
+        ) : !job ? (
+          <div className="text-sm text-gray-600 dark:text-gray-300">Job not found.</div>
+        ) : (
+          <>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-lg font-semibold text-black dark:text-white">{job.jobNumber}</div>
+                <div className="text-sm text-gray-600 dark:text-gray-300">
+                  Customer: {job.customerSnapshot?.name || "—"}{" "}
+                  {job.customerSnapshot?.email ? `• ${job.customerSnapshot.email}` : ""}
+                </div>
+              </div>
 
-        {/* Table */}
-        <div className="mt-6 overflow-x-auto">
-          {error ? (
-            <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
-              {error}
+              <div className="flex gap-2">
+                <Link to="/jobs">
+                  <Button variant="outline">Back</Button>
+                </Link>
+                {job.quoteId ? (
+                  <Link to={`/quotes/${job.quoteId}`}>
+                    <Button variant="outline">Open Quote</Button>
+                  </Link>
+                ) : null}
+                <Button onClick={save} disabled={saving}>
+                  {saving ? "Saving..." : "Save"}
+                </Button>
+              </div>
             </div>
-          ) : null}
 
-          <table className="w-full table-auto">
-            <thead>
-              <tr className="bg-gray-2 text-left dark:bg-meta-4">
-                <th className="min-w-[150px] px-4 py-4 font-medium text-black dark:text-white">
-                  Job
-                </th>
-                <th className="min-w-[220px] px-4 py-4 font-medium text-black dark:text-white">
-                  Customer
-                </th>
-                <th className="min-w-[160px] px-4 py-4 font-medium text-black dark:text-white">
-                  Status
-                </th>
-                <th className="min-w-[160px] px-4 py-4 font-medium text-black dark:text-white">
-                  Total (inc GST)
-                </th>
-                <th className="px-4 py-4 font-medium text-black dark:text-white">
-                  Action
-                </th>
-              </tr>
-            </thead>
+            <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="rounded-sm border border-stroke p-4 dark:border-strokedark">
+                <div className="mb-3 text-sm font-semibold text-black dark:text-white">Details</div>
 
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td className="px-4 py-6 text-sm text-gray-600 dark:text-gray-300" colSpan={5}>
-                    Loading…
-                  </td>
-                </tr>
-              ) : items.length === 0 ? (
-                <tr>
-                  <td className="px-4 py-6 text-sm text-gray-600 dark:text-gray-300" colSpan={5}>
-                    No jobs found.
-                  </td>
-                </tr>
-              ) : (
-                items.map((j) => (
-                  <tr key={j._id} className="border-b border-stroke dark:border-strokedark">
-                    <td className="px-4 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-medium text-black dark:text-white">{j.jobNumber}</span>
-                        <span className="text-sm text-gray-600 dark:text-gray-300">
-                          {j.title || "—"}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-medium text-black dark:text-white">
-                          {j.customerSnapshot?.name || "—"}
-                        </span>
-                        <span className="text-sm text-gray-600 dark:text-gray-300">
-                          {j.customerSnapshot?.email || ""}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className={statusPill((j.status || "created") as JobStatus)}>
-                        {String(j.status || "created").replace("_", " ")}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className="font-medium text-black dark:text-white">
-                        {fmtMoney(j.totalIncTax)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <Link
-                        to={`/jobs/${j._id}`}
-                        className="text-sm font-medium text-primary hover:underline"
-                      >
-                        View
-                      </Link>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                <div className="grid grid-cols-1 gap-3">
+                  <Input label="Title" value={title} onChange={(e: any) => setTitle(e.target.value)} />
 
-          {/* Pagination */}
-          <div className="mt-5 flex items-center justify-between">
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              Page {page} of {totalPages}
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                disabled={page <= 1 || loading}
-                onClick={() => setPage((p) => Math.max(p - 1, 1))}
-              >
-                Prev
-              </Button>
-              <Button
-                variant="outline"
-                disabled={page >= totalPages || loading}
-                onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-              >
-                Next
-              </Button>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-black dark:text-white">Status</label>
+                    <select
+                      className="w-full rounded border border-stroke bg-transparent px-3 py-2 text-sm outline-none focus:border-primary dark:border-strokedark dark:text-white"
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value as any)}
+                    >
+                      {STATUS_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="mt-2">
+                      <Input
+                        label="Status note (optional)"
+                        value={statusNote}
+                        onChange={(e: any) => setStatusNote(e.target.value)}
+                        placeholder="E.g. Scheduled with customer, waiting on parts..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-black dark:text-white">Scheduled start</label>
+                      <input
+                        type="datetime-local"
+                        value={scheduledStart}
+                        onChange={(e) => setScheduledStart(e.target.value)}
+                        className="w-full rounded border border-stroke bg-transparent px-3 py-2 text-sm outline-none focus:border-primary dark:border-strokedark dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-black dark:text-white">Scheduled end</label>
+                      <input
+                        type="datetime-local"
+                        value={scheduledEnd}
+                        onChange={(e) => setScheduledEnd(e.target.value)}
+                        className="w-full rounded border border-stroke bg-transparent px-3 py-2 text-sm outline-none focus:border-primary dark:border-strokedark dark:text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-black dark:text-white">Notes</label>
+                    <textarea
+                      className="w-full rounded border border-stroke bg-transparent px-3 py-2 text-sm outline-none focus:border-primary dark:border-strokedark dark:text-white"
+                      rows={4}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Job notes..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-sm border border-stroke p-4 dark:border-strokedark">
+                <div className="mb-3 text-sm font-semibold text-black dark:text-white">Totals</div>
+                <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                  <div className="flex justify-between">
+                    <span>Subtotal (ex GST)</span>
+                    <span>{fmtMoney(job.subtotalExTax)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>GST</span>
+                    <span>{fmtMoney(job.taxTotal)}</span>
+                  </div>
+                  <div className="flex justify-between font-semibold text-black dark:text-white">
+                    <span>Total (inc GST)</span>
+                    <span>{fmtMoney(job.totalIncTax)}</span>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <div className="mb-2 text-sm font-semibold text-black dark:text-white">Status history</div>
+                  {Array.isArray(job.statusHistory) && job.statusHistory.length > 0 ? (
+                    <div className="space-y-2">
+                      {job.statusHistory
+                        .slice()
+                        .reverse()
+                        .map((h, idx) => (
+                          <div
+                            key={idx}
+                            className="rounded border border-stroke bg-white p-3 text-sm dark:border-strokedark dark:bg-boxdark"
+                          >
+                            <div className="text-black dark:text-white">
+                              <span className="font-medium">{h.from || "—"}</span> →{" "}
+                              <span className="font-medium">{h.to}</span>
+                            </div>
+                            <div className="text-xs text-gray-600 dark:text-gray-300">
+                              {h.at ? new Date(h.at).toLocaleString() : ""}
+                              {h.meta?.note ? ` • ${h.meta.note}` : ""}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-600 dark:text-gray-300">No history yet.</div>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );

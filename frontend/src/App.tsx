@@ -151,6 +151,8 @@ export default function App() {
           <Route path="/quotes/:id" element={<QuoteEditor />} />
           <Route path="/jobs" element={<JobsList />} />
           <Route path="/jobs/:id" element={<JobDetail />} />
+
+          
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/marketing" element={<Marketing />} />
           <Route path="/crm" element={<Crm />} />

@@ -93,6 +93,8 @@ export default function QuoteEditor() {
 
   const isLocked = status === "accepted" || !!lockedAt;
 
+  const [jobId, setJobId] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -111,6 +113,8 @@ export default function QuoteEditor() {
         setPricingMode(q.pricingMode);
         setTitle(q.title || "");
         setNotes(q.notes || "");
+
+        setJobId((q as any).jobId || null);
 
         setCustomerId((q as any).customerId || null);
         setCustomerSnapshot({
@@ -349,6 +353,12 @@ export default function QuoteEditor() {
                 </Button>
               </div>
             </div>
+
+            {!isNew && jobId ? (
+              <Link to={`/jobs/${jobId}`}>
+                <Button variant="outline">Open Job</Button>
+              </Link>
+            ) : null}
 
             {/* ✅ Blue Download button next to Send */}
             {!isNew && quoteId ? (

@@ -25,6 +25,17 @@ export type Job = {
 
   quoteId?: string;
 
+  notes?: string;
+
+  statusHistory?: Array<{
+    from?: string;
+    to: string;
+    at: string;
+    actorType: "user" | "system";
+    actorUserId?: string | null;
+    meta?: { note?: string };
+  }>;
+
   createdAt?: string;
   updatedAt?: string;
 };
@@ -45,6 +56,16 @@ export const jobsApi = {
 
   async get(id: string) {
     const { data } = await http.get<{ job: Job }>(`/jobs/${id}`);
+    return data.job;
+  },
+
+  async update(
+    id: string,
+    patch: Partial<Pick<Job, "status" | "scheduledStart" | "scheduledEnd" | "title" | "notes">> & {
+      statusNote?: string;
+    }
+  ) {
+    const { data } = await http.patch<{ job: Job }>(`/jobs/${id}`, patch);
     return data.job;
   },
 };
