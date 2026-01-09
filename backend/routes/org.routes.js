@@ -2,8 +2,72 @@
 const express = require("express");
 const Org = require("../models/Org");
 const { requireAuth } = require("../middleware/auth");
+const { stripe } = require("../utils/stripe");
 
 const router = express.Router();
+
+async function reconcileBillingFromStripe(org) {
+  const customerId = String(org?.billing?.stripeCustomerId || "").trim();
+  if (!customerId) return org;
+
+  // If already active/trialing, don’t spam Stripe on every refresh
+  const currentStatus = String(org.billing?.status || "free");
+  const currentPlan = String(org.billing?.plan || "free");
+  const hasDates = !!org.billing?.currentPeriodEnd || !!org.billing?.trialEndsAt;
+
+  if ((currentStatus === "active" || currentStatus === "trialing") && (currentPlan !== "free") && hasDates) {
+    return org;
+  }
+
+  // Find the latest subscription for this customer
+  const subs = await stripe.subscriptions.list({
+    customer: customerId,
+    status: "all",
+    limit: 5,
+  });
+
+  const sub = (subs.data || [])[0];
+  if (!sub) return org;
+
+  const priceId = sub.items?.data?.[0]?.price?.id || "";
+
+  const plan =
+    priceId === process.env.STRIPE_PRICE_PRO
+      ? "pro"
+      : priceId === process.env.STRIPE_PRICE_STARTER
+      ? "starter"
+      : "free";
+
+  const stripeStatus = String(sub.status || "canceled");
+  const status =
+    stripeStatus === "active"
+      ? "active"
+      : stripeStatus === "trialing"
+      ? "trialing"
+      : stripeStatus === "past_due" || stripeStatus === "unpaid"
+      ? "past_due"
+      : stripeStatus === "canceled"
+      ? "canceled"
+      : "free";
+
+  org.billing = org.billing || {};
+  org.billing.plan = plan;
+  org.billing.status = status;
+  org.billing.stripeSubscriptionId = String(sub.id || "");
+  org.billing.currentPeriodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000) : null;
+  org.billing.trialEndsAt = sub.trial_end ? new Date(sub.trial_end * 1000) : null;
+
+  await org.save();
+  console.log("✅ billing reconciled on read", {
+    orgId: String(org._id),
+    customerId,
+    subscriptionId: String(sub.id || ""),
+    plan,
+    status,
+  });
+
+  return org;
+}
 
 router.get("/me", requireAuth, async (req, res) => {
   try {
@@ -18,10 +82,12 @@ router.get("/me", requireAuth, async (req, res) => {
 
 router.get("/billing", requireAuth, async (req, res) => {
   try {
-    const org = await Org.findById(req.user.orgId).select("billing name currency taxRate branding");
+    let org = await Org.findById(req.user.orgId).select("billing name currency taxRate branding");
     if (!org) return res.status(404).json({ message: "Org not found" });
 
-    // ✅ IMPORTANT: return the actual stored billing values, not a schema definition
+    // ✅ Fallback sync if webhook didn’t update yet
+    org = await reconcileBillingFromStripe(org);
+
     const billing = org.billing || {
       plan: "free",
       status: "free",
@@ -44,7 +110,6 @@ router.get("/billing", requireAuth, async (req, res) => {
         status: billing.status || "free",
         trialEndsAt: billing.trialEndsAt || null,
         currentPeriodEnd: billing.currentPeriodEnd || null,
-        // you can include these if you want (optional)
         stripeCustomerId: billing.stripeCustomerId || "",
         stripeSubscriptionId: billing.stripeSubscriptionId || "",
       },

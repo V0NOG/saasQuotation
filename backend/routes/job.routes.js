@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const Job = require("../models/Job");
 const { requireAuth } = require("../middleware/auth");
 const { requireActiveBilling } = require("../middleware/billing");
+const { isOrgAdmin, canEditJob, canAssignJob } = require("../middleware/authorize"); // ✅ NEW
 
 const router = express.Router();
 
@@ -50,9 +51,20 @@ router.get("/", requireAuth, requireActiveBilling("starter"), async (req, res) =
     const status = String(req.query.status || "").trim();
     const search = String(req.query.search || "").trim();
 
+    const assignedTo = String(req.query.assignedTo || "").trim(); // "me" | userId | ""
+
     const filter = { orgId };
-    if (STATUSES.includes(status)) {
-      filter.status = status;
+
+    if (STATUSES.includes(status)) filter.status = status;
+
+    if (!isOrgAdmin(req.user)) {
+      filter.assignedTo = req.user.id;
+    } else if (assignedTo) {
+      if (assignedTo === "me") {
+        filter.assignedTo = req.user.id;
+      } else if (mongoose.isValidObjectId(assignedTo)) {
+        filter.assignedTo = assignedTo;
+      }
     }
 
     if (search) {
@@ -68,7 +80,7 @@ router.get("/", requireAuth, requireActiveBilling("starter"), async (req, res) =
     const [items, total] = await Promise.all([
       Job.find(filter)
         .sort({ createdAt: -1 })
-        .select("_id jobNumber status title customerSnapshot scheduledStart scheduledEnd totalIncTax quoteId createdAt")
+        .select("_id jobNumber status title customerSnapshot scheduledStart scheduledEnd totalIncTax quoteId assignedTo createdAt")
         .skip((page - 1) * limit)
         .limit(limit),
       Job.countDocuments(filter),
@@ -96,6 +108,10 @@ router.get("/:id", requireAuth, requireActiveBilling("starter"), async (req, res
     const job = await Job.findOne({ _id: req.params.id, orgId });
     if (!job) return res.status(404).json({ message: "Job not found" });
 
+    if (!isOrgAdmin(req.user) && String(job.assignedTo || "") !== String(req.user.id)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
     return res.json({ job });
   } catch (e) {
     console.error("jobs read error:", e);
@@ -103,14 +119,7 @@ router.get("/:id", requireAuth, requireActiveBilling("starter"), async (req, res
   }
 });
 
-/**
- * PATCH /api/jobs/:id
- * body may include:
- * - status
- * - scheduledStart, scheduledEnd (ISO strings or null)
- * - title
- * - notes
- */
+// PATCH /api/jobs/:id
 router.patch("/:id", requireAuth, requireActiveBilling("starter"), async (req, res) => {
   try {
     if (!requireValidObjectId(req.params.id)) return res.status(400).json({ message: "Invalid job id" });
@@ -121,7 +130,26 @@ router.patch("/:id", requireAuth, requireActiveBilling("starter"), async (req, r
     const job = await Job.findOne({ _id: req.params.id, orgId });
     if (!job) return res.status(404).json({ message: "Job not found" });
 
+    if (!canEditJob(req.user, job)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
     const updates = req.body || {};
+
+    if (updates.assignedTo !== undefined) {
+      if (!canAssignJob(req.user)) {
+        return res.status(403).json({ message: "Only admin/owner can assign jobs" });
+      }
+      if (updates.assignedTo === null || updates.assignedTo === "") {
+        job.assignedTo = null;
+      } else {
+        const nextAssignee = String(updates.assignedTo);
+        if (!mongoose.isValidObjectId(nextAssignee)) {
+          return res.status(400).json({ message: "Invalid assignedTo user id" });
+        }
+        job.assignedTo = nextAssignee;
+      }
+    }
 
     // ---- status transition ----
     if (updates.status !== undefined) {

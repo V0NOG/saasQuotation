@@ -37,37 +37,23 @@ async function getCustomerIdIfExists(orgId) {
   return { org, customerId };
 }
 
-/**
- * GET /api/billing/summary
- * Returns:
- * - Stripe customer basic info
- * - Default card snapshot (brand/last4/exp)
- */
 router.get("/summary", requireAuth, async (req, res) => {
   try {
     const { org, customerId } = await getCustomerIdIfExists(req.user.orgId);
     if (!org) return res.status(404).json({ message: "Org not found" });
 
     if (!customerId) {
-      return res.json({
-        customer: null,
-        defaultPaymentMethod: null,
-      });
+      return res.json({ customer: null, defaultPaymentMethod: null });
     }
 
-    // Customer
     const customer = await stripe.customers.retrieve(customerId);
 
-    // Payment methods (cards)
     const pmList = await stripe.paymentMethods.list({
       customer: customerId,
       type: "card",
       limit: 10,
     });
 
-    // Stripe doesn’t always guarantee “default” is first. We attempt:
-    // 1) invoice_settings.default_payment_method
-    // 2) first card on file
     let defaultPm = null;
 
     const defaultPmId = customer?.invoice_settings?.default_payment_method
@@ -78,7 +64,6 @@ router.get("/summary", requireAuth, async (req, res) => {
       const found = pmList.data.find((p) => String(p.id) === defaultPmId);
       if (found) defaultPm = found;
     }
-
     if (!defaultPm && pmList.data.length > 0) defaultPm = pmList.data[0];
 
     const defaultPaymentMethod = defaultPm
@@ -92,11 +77,7 @@ router.get("/summary", requireAuth, async (req, res) => {
       : null;
 
     return res.json({
-      customer: {
-        id: customer.id,
-        name: customer.name || "",
-        email: customer.email || "",
-      },
+      customer: { id: customer.id, name: customer.name || "", email: customer.email || "" },
       defaultPaymentMethod,
     });
   } catch (e) {
@@ -105,10 +86,6 @@ router.get("/summary", requireAuth, async (req, res) => {
   }
 });
 
-/**
- * GET /api/billing/invoices?limit=10
- * Returns list of invoices for the org's Stripe customer
- */
 router.get("/invoices", requireAuth, async (req, res) => {
   try {
     const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10)));
@@ -116,14 +93,9 @@ router.get("/invoices", requireAuth, async (req, res) => {
     const { org, customerId } = await getCustomerIdIfExists(req.user.orgId);
     if (!org) return res.status(404).json({ message: "Org not found" });
 
-    if (!customerId) {
-      return res.json({ items: [] });
-    }
+    if (!customerId) return res.json({ items: [] });
 
-    const invoices = await stripe.invoices.list({
-      customer: customerId,
-      limit,
-    });
+    const invoices = await stripe.invoices.list({ customer: customerId, limit });
 
     const items = (invoices.data || []).map((inv) => ({
       id: inv.id,
@@ -167,6 +139,7 @@ router.post("/checkout", requireAuth, async (req, res) => {
 
     // ✅ Only allow trial on starter
     const wantsTrial = Boolean(trial) && !isPro;
+    const resolvedPlan = planFromPrice(priceId);
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -174,12 +147,24 @@ router.post("/checkout", requireAuth, async (req, res) => {
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
       payment_method_collection: "always",
-      subscription_data: wantsTrial ? { trial_period_days: 7 } : undefined,
+
+      // ✅ IMPORTANT: put metadata on the SUBSCRIPTION, not just the session
+      subscription_data: {
+        ...(wantsTrial ? { trial_period_days: 7 } : {}),
+        metadata: {
+          orgId: String(org._id),
+          plan: resolvedPlan,
+          trial: wantsTrial ? "true" : "false",
+        },
+      },
+
+      // (optional) keep session metadata too (useful for debugging)
       metadata: {
         orgId: String(org._id),
-        plan: planFromPrice(priceId),
+        plan: resolvedPlan,
         trial: wantsTrial ? "true" : "false",
       },
+
       success_url: `${FRONTEND_URL}/billing?success=1`,
       cancel_url: `${FRONTEND_URL}/billing?canceled=1`,
     });
@@ -191,9 +176,6 @@ router.post("/checkout", requireAuth, async (req, res) => {
   }
 });
 
-/**
- * POST /api/billing/portal
- */
 router.post("/portal", requireAuth, async (req, res) => {
   try {
     const org = await Org.findById(req.user.orgId);

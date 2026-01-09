@@ -100,6 +100,10 @@ import QuoteEditor from "./pages/Quotes/QuoteEditor";
 import JobsList from "./pages/Jobs/JobsList";
 import JobDetail from "./pages/Jobs/JobDetail";
 
+import InvoicesList from "./pages/Invoices/InvoicesList";
+// import InvoiceDetail from "./pages/Invoices/InvoiceDetail";
+// import InvoiceEditor from "./pages/Invoices/InvoiceEditor";
+
 // ✅ NEW: public quote view
 import PublicQuoteView from "./pages/PublicQuote/PublicQuoteView";
 
@@ -151,8 +155,10 @@ export default function App() {
           <Route path="/quotes/:id" element={<QuoteEditor />} />
           <Route path="/jobs" element={<JobsList />} />
           <Route path="/jobs/:id" element={<JobDetail />} />
+          <Route path="/invoices" element={<InvoicesList />} />
+          {/* <Route path="/invoices/new" element={<InvoiceEditor />} /> */}
+          {/* <Route path="/invoices/:id" element={<InvoiceDetail />} /> */}
 
-          
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/marketing" element={<Marketing />} />
           <Route path="/crm" element={<Crm />} />
@@ -161,8 +167,8 @@ export default function App() {
           <Route path="/logistics" element={<Logistics />} />
 
           <Route path="/calendar" element={<Calendar />} />
-          <Route path="/invoice" element={<Invoices />} />
-          <Route path="/invoices" element={<Invoices />} />
+          {/* <Route path="/invoice" element={<Invoices />} /> */}
+          {/* <Route path="/invoices" element={<Invoices />} /> */}
           <Route path="/chat" element={<Chats />} />
           <Route path="/file-manager" element={<FileManager />} />
 

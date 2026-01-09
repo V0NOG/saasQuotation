@@ -6,6 +6,11 @@ import PageBreadCrumb from "../../components/common/PageBreadCrumb";
 import Button from "../../components/ui/button/Button";
 import Input from "../../components/form/input/InputField";
 
+import { useAuth } from "../../context/AuthContext";
+import { userApi } from "../../api/userApi";
+import type { AuthUser } from "../../context/AuthContext";
+
+
 import { jobsApi, type Job, type JobStatus } from "../../api/jobsApi";
 
 const STATUS_OPTIONS: { label: string; value: JobStatus }[] = [
@@ -40,6 +45,12 @@ export default function JobDetail() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const { user } = useAuth();
+  const isAdmin = user?.role === "owner" || user?.role === "admin";
+
+  const [orgUsers, setOrgUsers] = useState<AuthUser[]>([]);
+  const [assignedTo, setAssignedTo] = useState<string>(""); // "" = unassigned
+
   // editable fields
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<JobStatus>("created");
@@ -47,6 +58,26 @@ export default function JobDetail() {
   const [scheduledEnd, setScheduledEnd] = useState("");
   const [notes, setNotes] = useState("");
   const [statusNote, setStatusNote] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadUsers() {
+      if (!isAdmin) return;
+      try {
+        const users = await userApi.list({ role: "staff" });
+        if (!mounted) return;
+        setOrgUsers(users || []);
+      } catch {
+        // ignore - not critical to block job page
+      }
+    }
+
+    loadUsers();
+    return () => {
+      mounted = false;
+    };
+  }, [isAdmin]);
 
   useEffect(() => {
     let mounted = true;
@@ -63,6 +94,7 @@ export default function JobDetail() {
         setScheduledStart(toLocalInputValue(j.scheduledStart || null));
         setScheduledEnd(toLocalInputValue(j.scheduledEnd || null));
         setNotes(j.notes || "");
+        setAssignedTo((j as any).assignedTo || "");
       } catch (e: any) {
         const httpStatus = e?.response?.status;
         if (httpStatus === 402) {
@@ -93,6 +125,7 @@ export default function JobDetail() {
         scheduledEnd: scheduledEnd ? new Date(scheduledEnd).toISOString() : null,
         notes,
         statusNote: statusNote.trim() || undefined,
+        assignedTo: assignedTo || null,
       });
       setJob(updated);
       setStatusNote("");
@@ -211,6 +244,31 @@ export default function JobDetail() {
                     />
                   </div>
                 </div>
+                {isAdmin ? (
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-black dark:text-white">
+                      Assigned staff
+                    </label>
+                    <select
+                      className="w-full rounded border border-stroke bg-transparent px-3 py-2 text-sm outline-none focus:border-primary dark:border-strokedark dark:text-white"
+                      value={assignedTo}
+                      onChange={(e) => setAssignedTo(e.target.value)}
+                    >
+                      <option value="">Unassigned</option>
+                      {orgUsers.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {(u.firstName || u.lastName)
+                            ? `${u.firstName || ""} ${u.lastName || ""}`.trim()
+                            : u.email}{" "}
+                          ({u.email})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                      Only admin/owner can assign jobs.
+                    </p>
+                  </div>
+                ) : null}
               </div>
 
               <div className="rounded-sm border border-stroke p-4 dark:border-strokedark">

@@ -2,43 +2,89 @@
 const Org = require("../models/Org");
 
 /**
- * requireActiveBilling
- * Allows: active OR trialing
- * Blocks: free / canceled / past_due
+ * requireActiveBilling(minPlan = "starter")
+ * Rules:
+ * - Default: block EVERYTHING unless org is trialing/active AND plan >= minPlan
+ * - If you pass minPlan = null, it will ONLY require trialing/active (no plan tier check)
  *
- * Optional: requiredPlan can be "starter" or "pro"
+ * Use this on all paid features. Leave billing + auth routes unguarded.
  */
-function requireActiveBilling(requiredPlan = null) {
+function requireActiveBilling(minPlan = "starter") {
   return async function (req, res, next) {
     try {
-      const org = await Org.findById(req.user.orgId).select("billing");
+      const orgId = req.user?.orgId;
+      if (!orgId) return res.status(401).json({ message: "Unauthorized" });
+
+      const org = await Org.findById(orgId).select("billing");
       if (!org) return res.status(404).json({ message: "Org not found" });
 
       const billing = org.billing || {};
-      const status = billing.status || "free";
-      const plan = billing.plan || "free";
+      const status = String(billing.status || "free");
+      const plan = String(billing.plan || "free");
+      const trialEndsAt = billing.trialEndsAt ? new Date(billing.trialEndsAt) : null;
 
-      const okStatus = status === "active" || status === "trialing";
-      if (!okStatus) {
+      const rank = { free: 0, starter: 1, pro: 2, enterprise: 3 };
+
+      // Must be active or trialing
+      const isActive = status === "active";
+      const isTrialing = status === "trialing";
+
+      // Optional: expire trial if trialEndsAt is past
+      const trialExpired =
+        isTrialing &&
+        trialEndsAt instanceof Date &&
+        !Number.isNaN(trialEndsAt.getTime()) &&
+        trialEndsAt.getTime() < Date.now();
+
+      if (!isActive && !isTrialing) {
+        console.log("[billing] BLOCK", {
+          orgId,
+          requiredPlan: minPlan,
+          status,
+          plan,
+          trialEndsAt: trialEndsAt ? trialEndsAt.toISOString() : null,
+          path: req.originalUrl,
+        });
         return res.status(402).json({
-          message: "Subscription required",
-          billing: { status, plan },
+          message: "Subscription or trial required",
+          billing: { status, plan, trialEndsAt },
         });
       }
 
-      // Optional plan gating (starter/pro tiers)
-      if (requiredPlan) {
-        const rank = { free: 0, starter: 1, pro: 2, enterprise: 3 };
-        if ((rank[plan] ?? 0) < (rank[requiredPlan] ?? 0)) {
+      if (trialExpired) {
+        console.log("[billing] BLOCK (trial expired)", {
+          orgId,
+          requiredPlan: minPlan,
+          status,
+          plan,
+          trialEndsAt: trialEndsAt ? trialEndsAt.toISOString() : null,
+          path: req.originalUrl,
+        });
+        return res.status(402).json({
+          message: "Trial expired. Please subscribe to continue.",
+          billing: { status, plan, trialEndsAt },
+        });
+      }
+
+      // Plan tier gating (starter/pro)
+      if (minPlan) {
+        if ((rank[plan] ?? 0) < (rank[minPlan] ?? 0)) {
+          console.log("[billing] BLOCK (plan)", {
+            orgId,
+            requiredPlan: minPlan,
+            status,
+            plan,
+            trialEndsAt: trialEndsAt ? trialEndsAt.toISOString() : null,
+            path: req.originalUrl,
+          });
           return res.status(402).json({
-            message: `Plan upgrade required (${requiredPlan})`,
-            billing: { status, plan },
+            message: `Plan upgrade required (${minPlan})`,
+            billing: { status, plan, trialEndsAt },
           });
         }
       }
 
-      // attach for downstream use
-      req.orgBilling = { status, plan };
+      req.orgBilling = { status, plan, trialEndsAt };
       return next();
     } catch (e) {
       console.error("requireActiveBilling error:", e);

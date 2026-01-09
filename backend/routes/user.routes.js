@@ -29,6 +29,41 @@ function toUserDTO(u) {
   };
 }
 
+// GET /api/users  (admin/owner only) - list users in org for assignment
+router.get("/", requireAuth, async (req, res) => {
+  try {
+    const role = req.user.role;
+    if (role !== "owner" && role !== "admin") {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
+    const orgId = req.user.orgId;
+
+    const search = String(req.query.search || "").trim();
+    const roleFilter = String(req.query.role || "").trim(); // optional: "staff" | "admin" | "owner"
+
+    const filter = { orgId };
+
+    if (roleFilter && ["owner", "admin", "staff"].includes(roleFilter)) {
+      filter.role = roleFilter;
+    }
+
+    if (search) {
+      const rx = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      filter.$or = [{ firstName: rx }, { lastName: rx }, { email: rx }];
+    }
+
+    const users = await User.find(filter)
+      .sort({ firstName: 1, lastName: 1 })
+      .select("_id firstName lastName email role");
+
+    return res.json({ items: users.map(toUserDTO) });
+  } catch (e) {
+    console.error("users list error:", e);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
 // GET /api/user/me
 router.get("/me", requireAuth, async (req, res) => {
   try {

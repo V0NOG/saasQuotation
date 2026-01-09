@@ -16,16 +16,10 @@ const OrgSchema = new mongoose.Schema(
 
     industry: { type: String, enum: ["plumber", "electrician", "both"], default: "both" },
 
-    // backend/models/Org.js  (replace billing: { ... } defaults)
     billing: {
       plan: { type: String, enum: ["free", "starter", "pro", "enterprise"], default: "free" },
-      status: {
-        type: String,
-        enum: ["trialing", "active", "past_due", "canceled", "free"],
-        default: "free",
-      },
+      status: { type: String, enum: ["trialing", "active", "past_due", "canceled", "free"], default: "free" },
       trialEndsAt: { type: Date, default: null },
-
       stripeCustomerId: { type: String, default: "" },
       stripeSubscriptionId: { type: String, default: "" },
       currentPeriodEnd: { type: Date, default: null },

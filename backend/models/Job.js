@@ -22,10 +22,11 @@ const JobSchema = new mongoose.Schema(
     orgId: { type: mongoose.Schema.Types.ObjectId, ref: "Org", required: true, index: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
 
-    // Link to source quote
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
+
     quoteId: { type: mongoose.Schema.Types.ObjectId, ref: "Quote", required: true, index: true },
 
-    jobNumber: { type: String, required: true, index: true }, // e.g. J-20260109-AB12
+    jobNumber: { type: String, required: true, index: true },
     status: {
       type: String,
       enum: ["created", "scheduled", "in_progress", "completed", "canceled"],
@@ -33,7 +34,6 @@ const JobSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Snapshot customer for safety
     customerSnapshot: {
       name: { type: String, default: "" },
       email: { type: String, default: "" },
@@ -44,11 +44,9 @@ const JobSchema = new mongoose.Schema(
     title: { type: String, default: "" },
     notes: { type: String, default: "" },
 
-    // Scheduling (optional now, used later)
     scheduledStart: { type: Date, default: null },
     scheduledEnd: { type: Date, default: null },
 
-    // Copy of quote line items + totals at acceptance time
     lines: { type: Array, default: [] },
     subtotalExTax: { type: Number, default: 0 },
     taxTotal: { type: Number, default: 0 },
@@ -59,10 +57,8 @@ const JobSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Prevent duplicate jobs for same quote
 JobSchema.index({ quoteId: 1 }, { unique: true });
-
-// Also keep jobNumber unique per org
 JobSchema.index({ orgId: 1, jobNumber: 1 }, { unique: true });
+JobSchema.index({ orgId: 1, assignedTo: 1, createdAt: -1 });
 
 module.exports = mongoose.model("Job", JobSchema);

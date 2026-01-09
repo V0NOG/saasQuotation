@@ -1,10 +1,10 @@
+// backend/routes/stripe.webhook.js
 const express = require("express");
 const Org = require("../models/Org");
 const { stripe } = require("../utils/stripe");
 
 const router = express.Router();
 
-// IMPORTANT: this route must use express.raw in server.js
 router.post("/stripe", async (req, res) => {
   const sig = req.headers["stripe-signature"];
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -24,61 +24,77 @@ router.post("/stripe", async (req, res) => {
   }
 
   try {
-    // Helpers
-    const setOrgBillingFromSubscription = async (subscription) => {
-      const customerId = subscription.customer;
-      const subId = subscription.id;
+    const planFromPriceId = (priceId) => {
+      if (priceId === process.env.STRIPE_PRICE_PRO) return "pro";
+      if (priceId === process.env.STRIPE_PRICE_STARTER) return "starter";
+      return "free";
+    };
 
-      const priceId =
-        subscription.items?.data?.[0]?.price?.id || "";
+    const normalizeStatus = (stripeStatus) => {
+      if (stripeStatus === "active") return "active";
+      if (stripeStatus === "trialing") return "trialing";
+      if (stripeStatus === "past_due" || stripeStatus === "unpaid") return "past_due";
+      if (stripeStatus === "canceled") return "canceled";
+      return "free";
+    };
 
-      const plan =
-        priceId === process.env.STRIPE_PRICE_PRO
-          ? "pro"
-          : priceId === process.env.STRIPE_PRICE_STARTER
-          ? "starter"
-          : "free";
+    const setOrgBillingFromSubscription = async (subscription, fallbackOrgId = null) => {
+      const customerId = String(subscription.customer || "");
+      const subId = String(subscription.id || "");
+      const priceId = subscription.items?.data?.[0]?.price?.id || "";
 
-      const status = subscription.status; // active, trialing, past_due, canceled, unpaid...
+      const plan = planFromPriceId(priceId);
+      const status = normalizeStatus(subscription.status);
 
-      const org =
-        (subscription.metadata?.orgId
-          ? await Org.findById(subscription.metadata.orgId)
-          : null) || (await Org.findOne({ "billing.stripeCustomerId": customerId }));
+      // Try to find org in the most reliable order:
+      // 1) subscription.metadata.orgId
+      // 2) fallbackOrgId (from checkout session metadata)
+      // 3) by stripeCustomerId
+      let org =
+        (subscription.metadata?.orgId ? await Org.findById(subscription.metadata.orgId) : null) ||
+        (fallbackOrgId ? await Org.findById(fallbackOrgId) : null) ||
+        (customerId ? await Org.findOne({ "billing.stripeCustomerId": customerId }) : null);
 
       if (!org) return;
 
       org.billing = org.billing || {};
-      org.billing.stripeCustomerId = String(customerId);
-      org.billing.stripeSubscriptionId = String(subId);
+      org.billing.stripeCustomerId = customerId;
+      org.billing.stripeSubscriptionId = subId;
       org.billing.plan = plan;
-
-      // normalize to your enum
-      if (status === "active") org.billing.status = "active";
-      else if (status === "trialing") org.billing.status = "trialing";
-      else if (status === "past_due" || status === "unpaid") org.billing.status = "past_due";
-      else if (status === "canceled") org.billing.status = "canceled";
-      else org.billing.status = "free"; // ✅ safest fallback
+      org.billing.status = status;
 
       if (subscription.current_period_end) {
         org.billing.currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+      } else {
+        org.billing.currentPeriodEnd = null;
       }
 
       if (subscription.trial_end) {
         org.billing.trialEndsAt = new Date(subscription.trial_end * 1000);
+      } else {
+        org.billing.trialEndsAt = null;
       }
 
       await org.save();
+      console.log("✅ Org billing synced", {
+        orgId: String(org._id),
+        customerId,
+        subId,
+        plan,
+        status,
+      });
     };
 
     switch (event.type) {
       case "checkout.session.completed": {
-        // After checkout completes, fetch the subscription and sync
         const session = event.data.object;
 
         if (session.mode === "subscription" && session.subscription) {
           const subscription = await stripe.subscriptions.retrieve(session.subscription);
-          await setOrgBillingFromSubscription(subscription);
+
+          // ✅ use session.metadata.orgId as fallback if subscription metadata is missing
+          const fallbackOrgId = session?.metadata?.orgId ? String(session.metadata.orgId) : null;
+          await setOrgBillingFromSubscription(subscription, fallbackOrgId);
         }
         break;
       }
@@ -87,14 +103,13 @@ router.post("/stripe", async (req, res) => {
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
         const subscription = event.data.object;
-        await setOrgBillingFromSubscription(subscription);
+        await setOrgBillingFromSubscription(subscription, null);
         break;
       }
 
       case "invoice.payment_failed": {
         const invoice = event.data.object;
-        const customerId = invoice.customer;
-
+        const customerId = String(invoice.customer || "");
         const org = await Org.findOne({ "billing.stripeCustomerId": customerId });
         if (org) {
           org.billing = org.billing || {};

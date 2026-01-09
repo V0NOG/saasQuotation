@@ -9,6 +9,8 @@ export type Job = {
   status: JobStatus;
   title?: string;
 
+  assignedTo?: string | null;
+
   customerSnapshot?: {
     name?: string;
     email?: string;
@@ -49,7 +51,7 @@ export type JobListResponse = {
 };
 
 export const jobsApi = {
-  async list(params: { page?: number; limit?: number; search?: string; status?: JobStatus | "" }) {
+  async list(params: { page?: number; limit?: number; search?: string; status?: JobStatus | ""; assignedTo?: string }) {
     const { data } = await http.get<JobListResponse>("/jobs", { params });
     return data;
   },
@@ -61,7 +63,7 @@ export const jobsApi = {
 
   async update(
     id: string,
-    patch: Partial<Pick<Job, "status" | "scheduledStart" | "scheduledEnd" | "title" | "notes">> & {
+    patch: Partial<Pick<Job, "status" | "scheduledStart" | "scheduledEnd" | "title" | "notes" | "assignedTo">> & {
       statusNote?: string;
     }
   ) {

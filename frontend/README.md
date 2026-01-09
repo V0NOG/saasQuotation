@@ -1,184 +1,208 @@
-# TailAdmin Pro - React.js (v2.2.2)
+Phase 7 — Convert “Jobs” into a real job workflow
+7.1 Job actions (must-have)
 
-[TailAdmin](https://tailadmin.com) is a modern, responsive, and customizable admin dashboard template built using Tailwind CSS and React.js. It is designed to help developers build beautiful and functional dashboards quickly and easily.
+Assign staff (job assignedTo userId, plus “My Jobs” filter)
 
-## Quick Links
+Job checklists (custom per org + per job)
 
-- [✨ Visit Website](https://tailadmin.com)
-- [📄 Documentation](https://tailadmin.com/docs)
-- [⬇️ Download](https://tailadmin.com/download)
-- [🌐 Live Site](https://react-demo.tailadmin.com)
+Job attachments (photos, PDFs, site docs)
 
-## Installation
+Start simple: S3/R2 storage + DB metadata
 
-### Prerequisites
+Job comments / internal notes thread (audit who wrote what)
 
-To get started with TailAdmin, ensure you have the following prerequisites installed and set up:
+7.2 On-site time tracking (quick win)
 
-- Node.js 18.x or later (recommended to use Node.js 20.x or later)
+Start/stop timer per job
 
-### Getting Started
+Store time entries: startedAt, endedAt, note, userId
 
-1. Install dependencies:
+Job totals: labour hours and labour cost (optional later)
 
-   ```bash
-   npm install
-   # or
-   yarn install
-   ```
+7.3 Job scheduling (calendar worthy)
 
-   > Use the `--legacy-peer-deps` flag if you encounter peer-deps error during installation.
+Drag/drop calendar (weekly view)
 
-2. Start the development server:
+Conflict warnings if staff double-booked
 
-   ```bash
-   npm start
-   # or
-   yarn start
-   ```
+SMS/email reminders to customer (later)
 
-   Runs the app in the development mode.\
-   Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+Phase 8 — Invoices + Payments (revenue enabling)
+8.1 Invoicing
 
-## Changelog
+Convert job → invoice
 
-### Version 2.2.2 - [December 29, 2025]
+Invoice statuses: draft → sent → paid → overdue → void
 
-- Added date range picker to Statistics Chart component
-- Responsive date picker: icon-only on mobile, full input on desktop
-- Fixed flatpickr calendar positioning on mobile devices
-- Improved calendar popup border styling in light mode
+Invoice PDF generation
 
-### Version 2.2.1 - [October 08, 2025]
+Email invoice to customer (same mailer system you built)
 
-- Update Tooltip design and use floating-ui/react for better usability
-- Update Popover design and use floating-ui/react for better usability
-- Fixed reported minor bugs and UI issues
+8.2 Payments
 
-### Version 2.2.0 - [July 30, 2025]
+Stripe Payment Link or hosted checkout for invoice
 
-- Fixed reported minor bugs and UI issues
-- Updated packages
+Record payment events via webhook
 
-#### 🧭 **Logistics Dashboard** – _Added_
+Receipt email to customer
 
-- Redesigned logistics dashboard interface
-- Delivery activity table
-- Delivery tracking timeline
-- Total revenue earned chart
+Optional: partial payments + deposits
 
-#### 🛍️ **E-commerce Pages** – _Added_
+Phase 9 — Pricebook + Templates that scale
+9.1 Pricebook upgrades
 
-- **Products**:
+Categories + tags
 
-  - Product list table
-  - Add product form
+“Favourite items”
 
-- **Invoices**:
+Bundles / Kits (e.g., “Hot Water Install Pack”)
 
-  - Invoice list table
-  - Single invoice view
-  - View invoice modal
-  - Create invoice form
+9.2 Quote templates
 
-- **Transactions**:
+Templates by job type (plumbing/electrical/general)
 
-  - Transaction list table
-  - Single transaction detail view
+Pre-filled scope text + default line items
 
-#### 🧠 **AI Assistant Suite (New App Example)** – _Newly Added_
+“Duplicate quote” as template
 
-- Text generator
-- Image generator
-- Code generator
-- Video generator
+Phase 10 — Customer portal (high retention feature)
 
-#### 🔑 **API Key Management** – _Newly Added_
+Customer can:
 
-- API key dashboard
-- API key table view
-- Add API key modal
+View quote history + accept
 
-#### 🔌 **Integrations (Pages)** – _Newly Added_
+View job status
 
-- Integration cards UI
-- Integration details modal
-- Add integration modal
-- Integration settings modal
-- Delete integration confirmation modal
+View invoices + pay
 
-### ⚙️ **Support (New App Example)** – _Newly Added_
+Upload photos / documents
 
-- Support ticket list page
-- Support ticket reply interface
+This reduces admin calls massively.
 
-#### 📊 **Charts & Visuals** - _Imporoved_
+Phase 11 — Notifications + Activity log
 
-- New bar chart design added
+Global activity feed per org:
 
-### Version 2.1.2 - [Jun 02, 2025]
+“Quote sent”, “Job scheduled”, “Invoice paid”
 
-#### Update Overview
+Email notifications:
 
-- Basic Table 3 Dropdown (cropped) update
-- Popover and Tooltip component overflow (cropped) issue update
+Quote sent
 
-### Version 2.1.1 - [March 25, 2025]
+Quote accepted/declined
 
-- Upgraded to React 19
-- Included overrides for packages to prevent peer dependency errors.
-- Migrated from react-flatpickr to flatpickr package for React 19 support
+Job scheduled
 
-### Version 2.1.0 - [March 10, 2025]
+Invoice overdue
 
-#### Update Overview
+Phase 12 — Admin + SaaS hardening
 
-- Added new dashboard design for saas product.
-- New Metrics card
-- Product performance tab with charts
+Role permissions (fine-grained)
 
-### Version 2.0.1 - [February 27, 2025]
+staff can’t edit org/billing
 
-#### Update Overview
+Rate limiting on auth + public routes
 
-- Upgraded to Tailwind CSS v4 for better performance and efficiency.
-- Updated class usage to match the latest syntax and features.
-- Replaced deprecated class and optimized styles.
+Audit log export (CSV)
 
-#### Next Steps
+Backup/restore strategy (Mongo + file storage)
 
-- Run npm install or yarn install to update dependencies.
-- Check for any style changes or compatibility issues.
-- Refer to the Tailwind CSS v4 [Migration Guide](https://tailwindcss.com/docs/upgrade-guide) on this release. if needed.
-- This update keeps the project up to date with the latest Tailwind improvements. 🚀
 
-### Version 2.0.0 - [February 2025]
 
-A major update with comprehensive redesign and modern React patterns implementation.
 
-#### Major Improvements
 
-- Complete UI redesign with modern React patterns
-- New features: collapsible sidebar, chat, and calendar
-- Improved performance and accessibility
-- Updated data visualization using ApexCharts
 
-#### Key Features
 
-- Redesigned dashboards (Ecommerce, Analytics, Marketing, CRM)
-- Enhanced navigation with React Router integration
-- Advanced tables with sorting and filtering
-- Calendar with drag-and-drop support
-- New UI components and improved existing ones
 
-#### Breaking Changes
 
-- Updated sidebar component API
-- Migrated charts to ApexCharts
-- Revised authentication system
 
-[Read more](https://tailadmin.com/docs/update-logs/react) on the changelog.
 
-## License
 
-Refer to our [LICENSE](https://tailadmin.com/license) page for more information.
+Accepted Quote → Job → Invoice → Send/Pay → Receipt/Status updates, all with one canonical totals engine (quoteMath.computeQuoteTotals) and billing gating (requireActiveBilling) where needed.
+
+What we should build next (Phase 6)
+A) “Create invoice from job” (and/or from accepted quote)
+
+Backend
+
+POST /api/jobs/:id/invoices (creates draft invoice from job snapshot)
+
+Prevent duplicates: if job already has an invoice, return it (idempotent)
+
+Invoice lines + totals computed using computeQuoteTotals()
+
+Frontend
+
+Job detail page: Create Invoice button (only when job is completed or at least in_progress, your choice)
+
+After creation: navigate to invoice detail view
+
+B) Invoice lifecycle + delivery
+
+Statuses: draft → issued/sent → paid → void
+
+POST /api/invoices/:id/send (email PDF to customer)
+
+GET /api/invoices/:id/pdf (download/preview)
+
+Optional next: Stripe payment link per invoice (or “Pay invoice” public page like your public quote)
+
+C) Billing gate the revenue features (without breaking auth/refresh)
+
+Gate: invoice creation, sending, job creation from quote, etc.
+
+Don’t gate: auth refresh endpoints, public quote/invoice pages, org billing pages
+
+The minimum files I need next (so I don’t assume anything)
+
+Please paste these files exactly as they are:
+
+Backend (must-have)
+
+backend/models/Invoice.js
+
+backend/routes/invoice.routes.js
+
+backend/routes/job.routes.js
+
+backend/routes/quote.routes.js (the part where quote becomes accepted / job created if you already did that)
+
+backend/server.js (just the routes mounting section)
+
+Frontend (must-have)
+
+frontend/src/api/invoicesApi.ts
+
+frontend/src/api/jobsApi.ts
+
+frontend/src/pages/Jobs/JobDetail.tsx
+
+frontend/src/pages/Invoices/Invoices.tsx and frontend/src/pages/Invoices/InvoicesList.tsx
+
+frontend/src/App.tsx (routes only is fine)
+
+While you grab those: what I’m going to implement (no surprises)
+
+Once I have the files above, I’ll patch in:
+
+Backend changes
+
+Job → Invoice creation endpoint
+
+pulls from job.customerSnapshot, job.lines, job.orgId
+
+totals computed via computeQuoteTotals({ lines, orgTaxRate })
+
+Add invoiceId reference onto Job (recommended)
+
+Add idempotency check (job can’t spawn multiple invoices)
+
+Add requireAuth + requireActiveBilling() on create/send endpoints
+
+Frontend changes
+
+In JobDetail.tsx: Create Invoice CTA that calls jobsApi.createInvoice(jobId) then routes to invoice
+
+Invoices list uses your invoicesApi.list(...)
+
+Invoice detail page (if you have one) gets Send invoice + Download PDF
